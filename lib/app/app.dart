@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../screens/lobby_screen.dart';
 import '../screens/login_screen.dart';
+import '../screens/table_screen.dart';
 import '../services/auth_service.dart';
 import '../services/ws/ws_service.dart';
 
@@ -45,7 +46,20 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
           path: '/lobby',
           builder: (context, state) => LobbyScreen(auth: _auth, ws: _ws),
         ),
-        // Table screen comes next milestone.
+        GoRoute(
+          path: '/table',
+          builder: (context, state) {
+            final q = state.uri.queryParameters;
+            final me = q['me'] ?? 'me';
+            final players = (q['players'] ?? 'me,p2,p3,p4')
+                .split(',')
+                .map((e) => e.trim())
+                .where((e) => e.isNotEmpty)
+                .toList();
+
+            return TableScreen(localPlayerId: me, playerNames: players);
+          },
+        ),
       ],
     );
   }

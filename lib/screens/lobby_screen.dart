@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../services/auth_service.dart';
 import '../services/ws/v2_types.dart';
@@ -92,6 +93,24 @@ class _LobbyScreenState extends State<LobbyScreen> {
                         }
                       : null,
                   child: const Text('lobby.snapshot.get'),
+                ),
+                OutlinedButton(
+                  onPressed: () {
+                    context.go('/table?me=me&players=me,p2');
+                  },
+                  child: const Text('Table (2p mock)'),
+                ),
+                OutlinedButton(
+                  onPressed: () {
+                    context.go('/table?me=me&players=me,p2,p3,p4');
+                  },
+                  child: const Text('Table (4p mock)'),
+                ),
+                OutlinedButton(
+                  onPressed: () {
+                    context.go('/table?me=me&players=me,p2,p3,p4,p5,p6');
+                  },
+                  child: const Text('Table (6p mock)'),
                 ),
               ],
             ),
