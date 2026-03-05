@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../screens/lobby_screen.dart';
 import '../screens/login_screen.dart';
 import '../services/auth_service.dart';
+import '../services/ws/ws_service.dart';
 
 class TrucoshiApp extends StatefulWidget {
   const TrucoshiApp({super.key});
@@ -14,7 +15,7 @@ class TrucoshiApp extends StatefulWidget {
 
 class _TrucoshiAppState extends State<TrucoshiApp> {
   late final AuthService _auth;
-  // WsService comes next milestone.
+  late final WsService _ws;
   late final GoRouter _router;
 
   @override
@@ -22,7 +23,7 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
     super.initState();
 
     _auth = AuthService();
-    // _ws = WsService(auth: _auth);
+    _ws = WsService(auth: _auth);
 
     _router = GoRouter(
       initialLocation: '/login',
@@ -42,7 +43,7 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
         ),
         GoRoute(
           path: '/lobby',
-          builder: (context, state) => LobbyScreen(auth: _auth),
+          builder: (context, state) => LobbyScreen(auth: _auth, ws: _ws),
         ),
         // Table screen comes next milestone.
       ],
@@ -51,7 +52,7 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
 
   @override
   void dispose() {
-    // _ws.dispose();
+    _ws.dispose();
     _auth.dispose();
     super.dispose();
   }
