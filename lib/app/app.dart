@@ -1,0 +1,70 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../screens/lobby_screen.dart';
+import '../screens/login_screen.dart';
+import '../services/auth_service.dart';
+
+class TrucoshiApp extends StatefulWidget {
+  const TrucoshiApp({super.key});
+
+  @override
+  State<TrucoshiApp> createState() => _TrucoshiAppState();
+}
+
+class _TrucoshiAppState extends State<TrucoshiApp> {
+  late final AuthService _auth;
+  // WsService comes next milestone.
+  late final GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _auth = AuthService();
+    // _ws = WsService(auth: _auth);
+
+    _router = GoRouter(
+      initialLocation: '/login',
+      refreshListenable: _auth,
+      redirect: (context, state) {
+        final loggedIn = _auth.isLoggedIn;
+        final goingToLogin = state.matchedLocation == '/login';
+
+        if (!loggedIn && !goingToLogin) return '/login';
+        if (loggedIn && goingToLogin) return '/lobby';
+        return null;
+      },
+      routes: [
+        GoRoute(
+          path: '/login',
+          builder: (context, state) => LoginScreen(auth: _auth),
+        ),
+        GoRoute(
+          path: '/lobby',
+          builder: (context, state) => LobbyScreen(auth: _auth),
+        ),
+        // Table screen comes next milestone.
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    // _ws.dispose();
+    _auth.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      title: 'Trucoshi',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.red),
+        useMaterial3: true,
+      ),
+      routerConfig: _router,
+    );
+  }
+}
