@@ -152,9 +152,12 @@ class _TableScreenState extends State<TableScreen> {
     final winnerTeamIdx = _readWinnerTeamIdx(game);
 
     final myHand = _readCardList(me?['hand']);
+    final myUsed = _readCardList(me?['used']);
     final myCommands = _readStringList(me?['commands']);
 
     final handState = _readHandState(game);
+    final roundInfo = _readRoundInfo(game);
+
     final canPlay = meSeatIdx != null && turnSeatIdx != null && meSeatIdx == turnSeatIdx;
     final canPlayCard = canPlay && handState == 'waiting_play';
 
@@ -206,6 +209,7 @@ class _TableScreenState extends State<TableScreen> {
                 Text(
                   'phase=${match?['phase'] ?? '?'}'
                   '  hand_state=${handState ?? '?'}'
+                  '${roundInfo == null ? '' : '  round=${roundInfo.currentRound}/${roundInfo.totalRounds}'}'
                   '  turn=${turnSeatIdx?.toString() ?? '?'}'
                   '${forehandSeatIdx == null ? '' : '  forehand=$forehandSeatIdx'}'
                   '${meSeatIdx == null ? '' : '  me=$meSeatIdx'}',
@@ -256,7 +260,7 @@ class _TableScreenState extends State<TableScreen> {
                       return ((raw % n) + n) % n;
                     }
 
-                    final playedCards = _readPlayedCards(game);
+                    final playedCards = roundInfo?.cards ?? const <Map<String, Object?>>[];
 
                     return Stack(
                       children: [
@@ -367,6 +371,27 @@ class _TableScreenState extends State<TableScreen> {
                         ),
                     ],
                   ),
+                if (myUsed.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Used:',
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final c in myUsed)
+                        TrucoCardImage(
+                          c,
+                          width: 40,
+                          height: 60,
+                          elevation: 1,
+                        ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 8),
                 Text(
                   canPlayCard
@@ -645,6 +670,52 @@ List<Offset> _cardPositions(int n, Size size) {
   return List.filled(n, tl(center));
 }
 
+class _RoundInfo {
+  const _RoundInfo({
+    required this.currentRound,
+    required this.totalRounds,
+    required this.cards,
+  });
+
+  final int currentRound;
+  final int totalRounds;
+  final List<Map<String, Object?>> cards;
+}
+
+_RoundInfo? _readRoundInfo(Map<String, Object?>? game) {
+  if (game == null) return null;
+
+  final raw = game['rounds'];
+  if (raw is! List) return null;
+
+  final totalRounds = raw.length;
+  if (totalRounds == 0) return null;
+
+  // Find the last non-empty round; when all are empty, use the last one.
+  var currentRoundIdx = totalRounds - 1;
+  for (var i = totalRounds - 1; i >= 0; i--) {
+    final r = raw[i];
+    if (r is List && r.isNotEmpty) {
+      currentRoundIdx = i;
+      break;
+    }
+  }
+
+  final current = raw[currentRoundIdx];
+  final cards = current is List
+      ? current
+          .whereType<Map>()
+          .map((e) => e.cast<String, Object?>())
+          .toList()
+      : const <Map<String, Object?>>[];
+
+  return _RoundInfo(
+    currentRound: currentRoundIdx + 1,
+    totalRounds: totalRounds,
+    cards: cards,
+  );
+}
+
 int? _readTurnSeatIdx(Map<String, Object?>? game) {
   if (game == null) return null;
 
@@ -746,29 +817,4 @@ String _readCardCode(Object? raw) {
   return raw.toString();
 }
 
-List<Map<String, Object?>> _readPlayedCards(Map<String, Object?>? game) {
-  if (game == null) return const <Map<String, Object?>>[];
-
-  final trick = game['trick'];
-  if (trick is List) {
-    return trick.whereType<Map>().map((e) => e.cast<String, Object?>()).toList();
-  }
-
-  final rounds = game['rounds'];
-  if (rounds is List && rounds.isNotEmpty) {
-    final last = rounds.last;
-    if (last is List) {
-      return last.whereType<Map>().map((e) => e.cast<String, Object?>()).toList();
-    }
-
-    if (last is Map) {
-      final cards = (last as Map)['cards'];
-      if (cards is List) {
-        return cards.whereType<Map>().map((e) => e.cast<String, Object?>()).toList();
-      }
-    }
-  }
-
-  return const <Map<String, Object?>>[];
-}
 
