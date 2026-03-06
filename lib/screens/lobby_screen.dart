@@ -47,47 +47,11 @@ class _LobbyScreenState extends State<LobbyScreen> {
   }
 
   Future<void> _joinMatch(BuildContext context, {required String matchId}) async {
-    final nameCtrl = TextEditingController(text: 'Guest');
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Join match $matchId'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Your name',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Join'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (ok != true) return;
-
     widget.ws.send(
       WsInFrame(
         msg: WsMsg.matchJoin(
           matchId: matchId,
-          name: nameCtrl.text.trim().isEmpty ? 'Guest' : nameCtrl.text.trim(),
+          name: widget.auth.displayName,
         ),
       ),
     );
@@ -97,7 +61,6 @@ class _LobbyScreenState extends State<LobbyScreen> {
   }
 
   Future<void> _showCreateMatchDialog(BuildContext context) async {
-    final nameCtrl = TextEditingController(text: 'Guest');
     int maxPlayers = 2;
 
     final created = await showDialog<bool>(
@@ -109,13 +72,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Your name',
-                  border: OutlineInputBorder(),
-                ),
-              ),
+              Text('You will create as: ${widget.auth.displayName}'),
               const SizedBox(height: 12),
               DropdownButtonFormField<int>(
                 initialValue: maxPlayers,
@@ -154,7 +111,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
     widget.ws.send(
       WsInFrame(
         msg: WsMsg.matchCreate(
-          name: nameCtrl.text.trim().isEmpty ? 'Guest' : nameCtrl.text.trim(),
+          name: widget.auth.displayName,
           maxPlayers: maxPlayers,
           // Let the server use defaults for the rest.
         ),

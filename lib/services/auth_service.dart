@@ -12,10 +12,15 @@ class AuthService extends ChangeNotifier {
   String? _accessToken;
   bool _isGuest = false;
 
+  String? _displayName;
+
   String? get accessToken => _accessToken;
 
   bool get isGuest => _isGuest;
   bool get isLoggedIn => _isGuest || (_accessToken != null && _accessToken!.isNotEmpty);
+
+  /// A name to use for match.create/join.
+  String get displayName => _displayName ?? (_isGuest ? 'Guest' : 'Player');
 
   String? _lastError;
   String? get lastError => _lastError;
@@ -32,6 +37,11 @@ class AuthService extends ChangeNotifier {
     _lastError = null;
     _accessToken = null;
     _isGuest = true;
+
+    // Generate a stable-ish guest name for this session.
+    final suffix = DateTime.now().millisecondsSinceEpoch % 1000;
+    _displayName = 'Guest$suffix';
+
     notifyListeners();
   }
 
@@ -94,7 +104,13 @@ class AuthService extends ChangeNotifier {
         return;
       }
 
+      final user = (json['user'] as Map?)?.cast<String, Object?>();
+      final name = user?['name'] as String?;
+
       _isGuest = false;
+      if (name != null && name.trim().isNotEmpty) {
+        _displayName = name.trim();
+      }
       setAccessToken(token);
     } catch (e) {
       _lastError = 'Failed to parse auth response: $e';
@@ -105,6 +121,7 @@ class AuthService extends ChangeNotifier {
   void logout() {
     _lastError = null;
     _isGuest = false;
+    _displayName = null;
     setAccessToken(null);
   }
 }
