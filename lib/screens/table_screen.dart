@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../services/ws/v2_types.dart';
 import '../services/ws/ws_service.dart';
 import '../widgets/status_chip.dart';
+import '../widgets/team_score_chip.dart';
 import '../widgets/truco_card.dart';
 
 /// Live table screen backed by WS v2 `match.*` + `game.*`.
@@ -237,7 +238,7 @@ class _TableScreenState extends State<TableScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: _TeamScoreChip(
+                      child: TeamScoreChip(
                         teamIdx: 0,
                         points: teamPoints?[0],
                         highlight: myTeamIdx == 0,
@@ -246,7 +247,7 @@ class _TableScreenState extends State<TableScreen> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: _TeamScoreChip(
+                      child: TeamScoreChip(
                         teamIdx: 1,
                         points: teamPoints?[1],
                         highlight: myTeamIdx == 1,
@@ -580,69 +581,6 @@ class _HandCard extends StatelessWidget {
           height: 96,
           elevation: enabled ? 4 : 1,
         ),
-      ),
-    );
-  }
-}
-
-class _TeamScoreChip extends StatelessWidget {
-  const _TeamScoreChip({
-    required this.teamIdx,
-    required this.points,
-    required this.highlight,
-    required this.winner,
-  });
-
-  final int teamIdx;
-  final int? points;
-  final bool highlight;
-  final bool winner;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    final base = teamIdx == 0 ? scheme.primary : scheme.tertiary;
-
-    final bg = winner
-        ? base.withOpacity(0.25)
-        : highlight
-        ? scheme.secondaryContainer
-        : scheme.surfaceContainerHighest;
-
-    final border = winner
-        ? Border.all(color: base, width: 2)
-        : highlight
-        ? Border.all(color: scheme.secondary, width: 2)
-        : Border.all(color: scheme.outlineVariant);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: border,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              winner ? 'Team $teamIdx • WIN' : 'Team $teamIdx',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: scheme.onSurface,
-              ),
-            ),
-          ),
-          Text(
-            (points ?? 0).toString(),
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
-              color: base,
-            ),
-          ),
-        ],
       ),
     );
   }
