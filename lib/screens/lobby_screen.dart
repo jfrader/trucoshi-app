@@ -52,6 +52,41 @@ class _LobbyScreenState extends State<LobbyScreen> {
     }
   }
 
+  Future<void> _showDisplayNameDialog(BuildContext context) async {
+    final ctrl = TextEditingController(text: widget.auth.displayName);
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Display name'),
+          content: TextField(
+            controller: ctrl,
+            decoration: const InputDecoration(
+              labelText: 'Name',
+              border: OutlineInputBorder(),
+            ),
+            autocorrect: false,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (ok != true) return;
+
+    widget.auth.setDisplayName(ctrl.text);
+  }
+
   Future<void> _joinMatch(BuildContext context, {required String matchId}) async {
     final actionId = 'join-${DateTime.now().microsecondsSinceEpoch}';
     setState(() {
@@ -242,6 +277,27 @@ class _LobbyScreenState extends State<LobbyScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            ListenableBuilder(
+              listenable: widget.auth,
+              builder: (context, _) {
+                final mode = widget.auth.isGuest ? 'guest' : 'auth';
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'You: ${widget.auth.displayName} ($mode)',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Edit display name',
+                      onPressed: () => unawaited(_showDisplayNameDialog(context)),
+                      icon: const Icon(Icons.edit),
+                    ),
+                  ],
+                );
+              },
+            ),
             ListenableBuilder(
               listenable: widget.ws,
               builder: (context, _) {
