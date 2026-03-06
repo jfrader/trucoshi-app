@@ -81,4 +81,28 @@ class WsMsg {
         type: 'match.snapshot.get',
         data: {'match_id': matchId},
       );
+
+  static WsMsg matchCreate({
+    required String name,
+    int? maxPlayers,
+    int? matchPoints,
+    bool? flor,
+    int? turnTimeMs,
+    int? team,
+  }) {
+    final options = <String, Object?>{};
+    if (maxPlayers != null) options['max_players'] = maxPlayers;
+    if (matchPoints != null) options['match_points'] = matchPoints;
+    if (flor != null) options['flor'] = flor;
+    if (turnTimeMs != null) options['turn_time_ms'] = turnTimeMs;
+
+    return WsMsg(
+      type: 'match.create',
+      data: {
+        'name': name,
+        ...?(options.isEmpty ? null : {'options': options}),
+        ...?(team == null ? null : {'team': team}),
+      },
+    );
+  }
 }

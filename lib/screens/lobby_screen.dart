@@ -46,6 +46,72 @@ class _LobbyScreenState extends State<LobbyScreen> {
     }
   }
 
+  Future<void> _showCreateMatchDialog(BuildContext context) async {
+    final nameCtrl = TextEditingController(text: 'Guest');
+    int maxPlayers = 2;
+
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Create match'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Your name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                initialValue: maxPlayers,
+                decoration: const InputDecoration(
+                  labelText: 'Max players',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 2, child: Text('2 (1v1)')),
+                  DropdownMenuItem(value: 4, child: Text('4 (2v2)')),
+                  DropdownMenuItem(value: 6, child: Text('6 (3v3)')),
+                ],
+                onChanged: (v) {
+                  if (v == null) return;
+                  maxPlayers = v;
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Create'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (created != true) return;
+
+    widget.ws.send(
+      WsInFrame(
+        msg: WsMsg.matchCreate(
+          name: nameCtrl.text.trim().isEmpty ? 'Guest' : nameCtrl.text.trim(),
+          maxPlayers: maxPlayers,
+          // Let the server use defaults for the rest.
+        ),
+      ),
+    );
+  }
+
   void _handleFrame(WsOutFrame frame) {
     final type = frame.msg.type;
     final data = frame.msg.data;
@@ -154,6 +220,12 @@ class _LobbyScreenState extends State<LobbyScreen> {
                         }
                       : null,
                   child: const Text('lobby.snapshot.get'),
+                ),
+                FilledButton.tonal(
+                  onPressed: widget.ws.state == WsConnectionState.connected
+                      ? () => unawaited(_showCreateMatchDialog(context))
+                      : null,
+                  child: const Text('Create match'),
                 ),
                 OutlinedButton(
                   onPressed: () {
