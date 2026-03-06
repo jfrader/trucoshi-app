@@ -49,20 +49,21 @@ class WsOutFrame {
 ///
 /// We keep [data] as a raw JSON map for now, and introduce typed payloads later.
 class WsMsg {
-  WsMsg({required this.type, required this.data});
+  WsMsg({required this.type, this.data});
 
   final String type;
-  final Map<String, Object?> data;
+  final Map<String, Object?>? data;
 
   Map<String, Object?> toJson() => {
         'type': type,
-        'data': data,
+        if (data != null) 'data': data,
       };
 
   static WsMsg fromJson(Map<String, Object?> json) {
+    final rawData = json['data'];
     return WsMsg(
       type: json['type'] as String,
-      data: (json['data'] as Map).cast<String, Object?>(),
+      data: rawData == null ? null : (rawData as Map).cast<String, Object?>(),
     );
   }
 
@@ -74,7 +75,6 @@ class WsMsg {
 
   static WsMsg lobbySnapshotGet() => WsMsg(
         type: 'lobby.snapshot.get',
-        data: const {},
       );
 
   static WsMsg matchSnapshotGet({required String matchId}) => WsMsg(

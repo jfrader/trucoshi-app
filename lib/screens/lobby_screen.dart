@@ -115,6 +115,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
   void _handleFrame(WsOutFrame frame) {
     final type = frame.msg.type;
     final data = frame.msg.data;
+    if (data == null) return;
 
     switch (type) {
       case 'lobby.snapshot':
