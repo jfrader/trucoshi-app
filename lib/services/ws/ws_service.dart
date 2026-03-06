@@ -18,10 +18,15 @@ enum WsConnectionState {
 
 class WsService extends ChangeNotifier {
   WsService({required AuthService auth}) : _auth = auth {
+    _lastAuthToken = _auth.accessToken;
+    _lastIsGuest = _auth.isGuest;
     _auth.addListener(_onAuthChanged);
   }
 
   final AuthService _auth;
+
+  String? _lastAuthToken;
+  bool _lastIsGuest = false;
 
   WebSocketChannel? _channel;
   StreamSubscription? _sub;
@@ -110,7 +115,13 @@ class WsService extends ChangeNotifier {
   }
 
   Future<void> disconnect() async {
-    _shouldReconnect = false;
+    await _disconnectInternal(disableReconnect: true);
+  }
+
+  Future<void> _disconnectInternal({required bool disableReconnect}) async {
+    if (disableReconnect) {
+      _shouldReconnect = false;
+    }
     _cancelReconnectTimer();
 
     await _sub?.cancel();
@@ -207,10 +218,34 @@ class WsService extends ChangeNotifier {
   }
 
   void _onAuthChanged() {
+    final nextToken = _auth.accessToken;
+    final nextIsGuest = _auth.isGuest;
+
+    final credsChanged = nextToken != _lastAuthToken || nextIsGuest != _lastIsGuest;
+
+    _lastAuthToken = nextToken;
+    _lastIsGuest = nextIsGuest;
+
     if (!_auth.isLoggedIn) {
-      // If token is cleared, drop the connection and stop reconnect attempts.
+      // If auth is cleared, drop the connection and stop reconnect attempts.
       unawaited(disconnect());
+      return;
     }
+
+    if (!credsChanged) return;
+
+    // Switching guest<->auth (or token changes) requires a reconnect to apply
+    // headers.
+    if (_state == WsConnectionState.connected || _state == WsConnectionState.connecting) {
+      unawaited(_restartForCredentialChange());
+    } else if (_shouldReconnect) {
+      unawaited(connect());
+    }
+  }
+
+  Future<void> _restartForCredentialChange() async {
+    await _disconnectInternal(disableReconnect: false);
+    await connect();
   }
 
   @override
