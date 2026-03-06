@@ -3,15 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../platform/platform_caps.dart';
 import '../services/auth_service.dart';
 import '../services/ws/v2_types.dart';
 import '../services/ws/ws_service.dart';
 
 class LobbyScreen extends StatefulWidget {
-  const LobbyScreen({super.key, required this.auth, required this.ws});
+  const LobbyScreen({super.key, required this.auth, required this.ws, required this.caps});
 
   final AuthService auth;
   final WsService ws;
+  final PlatformCaps caps;
 
   @override
   State<LobbyScreen> createState() => _LobbyScreenState();
@@ -299,7 +301,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Pick a name and jump into the lobby as a guest, or sign in.',
+            widget.caps.supportsWsAuthHeaders
+                ? 'Pick a name and jump into the lobby as a guest, or sign in.'
+                : 'Pick a name and jump into the lobby as a guest. (Web is guest-only for now.)',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),
@@ -320,10 +324,11 @@ class _LobbyScreenState extends State<LobbyScreen> {
             child: const Text('Continue as guest'),
           ),
           const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () => context.go('/login'),
-            child: const Text('Login / Register'),
-          ),
+          if (widget.caps.supportsWsAuthHeaders)
+            OutlinedButton(
+              onPressed: () => context.go('/login'),
+              child: const Text('Login / Register'),
+            ),
           const SizedBox(height: 12),
           Text(
             'Backend URL comes from --dart-define=TRUCOSHI_BACKEND_URL',
@@ -474,29 +479,32 @@ class _LobbyScreenState extends State<LobbyScreen> {
       appBar: AppBar(
         title: const Text('Lobby'),
         actions: [
-          if (!isLoggedIn)
-            IconButton(
-              tooltip: 'Login',
-              onPressed: () => context.go('/login'),
-              icon: const Icon(Icons.login),
-            )
-          else if (widget.auth.isGuest) ...[
-            IconButton(
-              tooltip: 'Login (upgrade from guest)',
-              onPressed: () => context.go('/login'),
-              icon: const Icon(Icons.login),
-            ),
-            IconButton(
-              tooltip: 'Logout',
-              onPressed: () => widget.auth.logout(),
-              icon: const Icon(Icons.logout),
-            ),
-          ] else
+          if (!isLoggedIn) ...[
+            if (widget.caps.supportsWsAuthHeaders)
+              IconButton(
+                tooltip: 'Login',
+                onPressed: () => context.go('/login'),
+                icon: const Icon(Icons.login),
+              ),
+          ] else if (widget.auth.isGuest) ...[
+            if (widget.caps.supportsWsAuthHeaders)
+              IconButton(
+                tooltip: 'Login (upgrade from guest)',
+                onPressed: () => context.go('/login'),
+                icon: const Icon(Icons.login),
+              ),
             IconButton(
               tooltip: 'Logout',
               onPressed: () => widget.auth.logout(),
               icon: const Icon(Icons.logout),
             ),
+          ] else ...[
+            IconButton(
+              tooltip: 'Logout',
+              onPressed: () => widget.auth.logout(),
+              icon: const Icon(Icons.logout),
+            ),
+          ],
         ],
       ),
       body: isLoggedIn ? _buildLobbyBody(context) : _buildUnauthedBody(context),

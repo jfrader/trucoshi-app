@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../config/app_config.dart';
+import '../../platform/platform_caps.dart';
 import '../auth_service.dart';
 import 'v2_types.dart';
 import 'ws_connector.dart';
@@ -17,13 +18,16 @@ enum WsConnectionState {
 }
 
 class WsService extends ChangeNotifier {
-  WsService({required AuthService auth}) : _auth = auth {
+  WsService({required AuthService auth, PlatformCaps? caps})
+      : _auth = auth,
+        _caps = caps ?? PlatformCaps.current() {
     _lastAuthToken = _auth.accessToken;
     _lastIsGuest = _auth.isGuest;
     _auth.addListener(_onAuthChanged);
   }
 
   final AuthService _auth;
+  final PlatformCaps _caps;
 
   String? _lastAuthToken;
   bool _lastIsGuest = false;
@@ -73,7 +77,7 @@ class WsService extends ChangeNotifier {
       return;
     }
 
-    if (kIsWeb && !isGuest) {
+    if (!_caps.supportsWsAuthHeaders && !isGuest) {
       _lastError =
           'WS auth on web is not supported yet (browsers cannot send Authorization headers). Use guest mode.';
       notifyListeners();

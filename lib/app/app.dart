@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../platform/platform_caps.dart';
 import '../screens/lobby_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/match_screen.dart';
@@ -9,13 +10,17 @@ import '../services/auth_service.dart';
 import '../services/ws/ws_service.dart';
 
 class TrucoshiApp extends StatefulWidget {
-  const TrucoshiApp({super.key});
+  const TrucoshiApp({super.key, this.platformCaps});
+
+  /// For tests / overrides.
+  final PlatformCaps? platformCaps;
 
   @override
   State<TrucoshiApp> createState() => _TrucoshiAppState();
 }
 
 class _TrucoshiAppState extends State<TrucoshiApp> {
+  late final PlatformCaps _caps;
   late final AuthService _auth;
   late final WsService _ws;
   late final GoRouter _router;
@@ -24,8 +29,10 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
   void initState() {
     super.initState();
 
+    _caps = widget.platformCaps ?? PlatformCaps.current();
+
     _auth = AuthService();
-    _ws = WsService(auth: _auth);
+    _ws = WsService(auth: _auth, caps: _caps);
 
     _router = GoRouter(
       initialLocation: '/lobby',
@@ -44,11 +51,11 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
       routes: [
         GoRoute(
           path: '/login',
-          builder: (context, state) => LoginScreen(auth: _auth),
+          builder: (context, state) => LoginScreen(auth: _auth, caps: _caps),
         ),
         GoRoute(
           path: '/lobby',
-          builder: (context, state) => LobbyScreen(auth: _auth, ws: _ws),
+          builder: (context, state) => LobbyScreen(auth: _auth, ws: _ws, caps: _caps),
         ),
         GoRoute(
           path: '/match/:id',

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../platform/platform_caps.dart';
 import '../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, required this.auth});
+  const LoginScreen({super.key, required this.auth, required this.caps});
 
   final AuthService auth;
+  final PlatformCaps caps;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -21,6 +23,17 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _busy = false;
 
   Future<void> _showTokenDialog() async {
+    if (!widget.caps.supportsWsAuthHeaders) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Web is guest-only for now. Authenticated WS requires Authorization headers, which browsers cannot send.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final tokenCtrl = TextEditingController();
     final nameCtrl = TextEditingController(text: _nameCtrl.text);
 
@@ -88,6 +101,17 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    if (!widget.caps.supportsWsAuthHeaders) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Web is guest-only for now. Sign-in will be enabled once WS auth is supported on web.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text;
     final name = _nameCtrl.text.trim();
@@ -134,8 +158,59 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Widget _buildGuestOnly(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Trucoshi - Guest (web)')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Web is guest-only for now.',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Browsers cannot send Authorization headers when opening a WebSocket, so authenticated WS connections are disabled until we choose a different auth mechanism (cookies or token handshakes).',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Display name',
+                helperText: 'Used for guest + match join/create.',
+                border: OutlineInputBorder(),
+              ),
+              enabled: !_busy,
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: _busy
+                  ? null
+                  : () {
+                      widget.auth.continueAsGuest(displayName: _nameCtrl.text);
+                      if (mounted) context.go('/lobby');
+                    },
+              child: const Text('Continue as guest'),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Dev note: backend URL comes from --dart-define=TRUCOSHI_BACKEND_URL',
+              style: TextStyle(fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (!widget.caps.supportsWsAuthHeaders) {
+      return _buildGuestOnly(context);
+    }
+
     final err = widget.auth.lastError;
 
     return Scaffold(
@@ -211,9 +286,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             FilledButton(
               onPressed: _busy ? null : _submit,
-              child: Text(_busy
-                  ? 'Working…'
-                  : (_registerMode ? 'Create account' : 'Login')),
+              child: Text(_busy ? 'Working…' : (_registerMode ? 'Create account' : 'Login')),
             ),
             const SizedBox(height: 12),
             Row(
