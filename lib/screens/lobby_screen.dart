@@ -229,6 +229,24 @@ class _LobbyScreenState extends State<LobbyScreen> {
     );
   }
 
+  Future<void> _watchMatch(
+    BuildContext context, {
+    required String matchId,
+  }) async {
+    final actionId = 'watch-${DateTime.now().microsecondsSinceEpoch}';
+    setState(() {
+      _pendingActionId = actionId;
+      _pendingMatchId = matchId;
+    });
+
+    widget.ws.send(
+      WsInFrame(
+        id: actionId,
+        msg: WsMsg.matchWatch(matchId: matchId),
+      ),
+    );
+  }
+
   Future<void> _showCreateMatchDialog(BuildContext context) async {
     int maxPlayers = 2;
     var teamChoice = _TeamChoice.auto;
@@ -574,7 +592,18 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   child: ListTile(
                     title: Text('Match $id'),
                     subtitle: Text('$phase$sizeLabel$namesLabel'),
-                    trailing: const Icon(Icons.chevron_right),
+                    trailing: Wrap(
+                      spacing: 8,
+                      children: [
+                        TextButton(
+                          onPressed: widget.ws.state == WsConnectionState.connected
+                              ? () => unawaited(_watchMatch(context, matchId: id))
+                              : null,
+                          child: const Text('Spectate'),
+                        ),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
                     onTap: () {
                       if (needsTeamChoice) {
                         unawaited(_showJoinMatchDialog(context, matchId: id));

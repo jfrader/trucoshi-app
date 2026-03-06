@@ -248,7 +248,8 @@ class _MatchScreenState extends State<MatchScreen> {
             const SizedBox(height: 12),
             if (phase != null)
               Text(
-                'phase=$phase  me_seat_idx=${meSeatIdx ?? '?'}  owner_seat_idx=${ownerSeatIdx ?? '?'}  all_ready=$allReady',
+                'phase=$phase  me_seat_idx=${meSeatIdx ?? '?'}  owner_seat_idx=${ownerSeatIdx ?? '?'}  all_ready=$allReady'
+                '${meSeatIdx == null ? '  (spectating)' : ''}',
                 style: const TextStyle(fontFamily: 'monospace'),
               ),
             const SizedBox(height: 12),

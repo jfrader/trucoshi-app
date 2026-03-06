@@ -127,6 +127,13 @@ class WsMsg {
     );
   }
 
+  static WsMsg matchWatch({required String matchId}) => WsMsg(
+        type: 'match.watch',
+        data: {
+          'match_id': matchId,
+        },
+      );
+
   static WsMsg matchReady({
     required String matchId,
     required bool ready,
