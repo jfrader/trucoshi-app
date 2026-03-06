@@ -126,4 +126,33 @@ class WsMsg {
       },
     );
   }
+
+  static WsMsg matchReady({
+    required String matchId,
+    required bool ready,
+  }) => WsMsg(
+        type: 'match.ready',
+        data: {
+          'match_id': matchId,
+          'ready': ready,
+        },
+      );
+
+  static WsMsg matchStart({
+    required String matchId,
+  }) => WsMsg(
+        type: 'match.start',
+        data: {
+          'match_id': matchId,
+        },
+      );
+
+  static WsMsg gameSnapshotGet({
+    required String matchId,
+  }) => WsMsg(
+        type: 'game.snapshot.get',
+        data: {
+          'match_id': matchId,
+        },
+      );
 }
