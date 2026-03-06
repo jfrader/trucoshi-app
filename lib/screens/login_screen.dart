@@ -12,16 +12,52 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _tokenCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController(text: 'test@example.com');
+  final _passwordCtrl = TextEditingController(text: 'test1234');
+  final _nameCtrl = TextEditingController(text: 'Test');
+
+  bool _registerMode = false;
+  bool _busy = false;
 
   @override
   void dispose() {
-    _tokenCtrl.dispose();
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    _nameCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() {
+      _busy = true;
+    });
+
+    try {
+      if (_registerMode) {
+        await widget.auth.register(
+          email: _emailCtrl.text,
+          password: _passwordCtrl.text,
+          name: _nameCtrl.text,
+        );
+      } else {
+        await widget.auth.login(
+          email: _emailCtrl.text,
+          password: _passwordCtrl.text,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final err = widget.auth.lastError;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Trucoshi - Login')),
       body: Padding(
@@ -29,14 +65,51 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Paste an access token (placeholder auth).',
+            Row(
+              children: [
+                Expanded(
+                  child: SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(value: false, label: Text('Login')),
+                      ButtonSegment(value: true, label: Text('Register')),
+                    ],
+                    selected: {_registerMode},
+                    onSelectionChanged: _busy
+                        ? null
+                        : (set) {
+                            setState(() {
+                              _registerMode = set.first;
+                            });
+                          },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _emailCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
             ),
             const SizedBox(height: 12),
+            if (_registerMode) ...[
+              TextField(
+                controller: _nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             TextField(
-              controller: _tokenCtrl,
+              controller: _passwordCtrl,
               decoration: const InputDecoration(
-                labelText: 'Access token',
+                labelText: 'Password',
                 border: OutlineInputBorder(),
               ),
               obscureText: true,
@@ -44,11 +117,24 @@ class _LoginScreenState extends State<LoginScreen> {
               enableSuggestions: false,
             ),
             const SizedBox(height: 12),
+            if (err != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  err,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
             FilledButton(
-              onPressed: () {
-                widget.auth.setAccessToken(_tokenCtrl.text);
-              },
-              child: const Text('Save token'),
+              onPressed: _busy ? null : _submit,
+              child: Text(_busy
+                  ? 'Working…'
+                  : (_registerMode ? 'Create account' : 'Login')),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Dev note: backend URL comes from --dart-define=TRUCOSHI_BACKEND_URL',
+              style: TextStyle(fontSize: 12),
             ),
           ],
         ),

@@ -34,6 +34,9 @@ dependencies:
   # Routing
   go_router: ^16.0.0
 
+  # HTTP
+  http: ^1.5.0
+
   # WebSocket (mobile-first via dart:io)
   web_socket_channel: ^3.0.3
 

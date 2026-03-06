@@ -5,7 +5,7 @@ class AppConfig {
   /// `flutter run --dart-define=TRUCOSHI_BACKEND_URL=http://10.0.2.2:8080`
   static const backendBaseUrl = String.fromEnvironment(
     'TRUCOSHI_BACKEND_URL',
-    defaultValue: 'http://localhost:8080',
+    defaultValue: 'http://localhost:2992',
   );
 
   /// WebSocket URL derived from [backendBaseUrl], e.g. `ws://localhost:8080/v2/ws`.
