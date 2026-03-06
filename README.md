@@ -4,7 +4,7 @@ Flutter client for Trucoshi.
 
 - Targets: **Android + iOS first**, **Web later**.
 - Backend: [`jfrader/trucoshi-rs`](https://github.com/jfrader/trucoshi-rs)
-- Realtime protocol: **WebSocket v2** (`/v2/ws`, bearer token required)
+- Realtime protocol: **WebSocket v2** (`/v2/ws`, supports guest + authenticated sessions)
 
 ## Dev quickstart
 
@@ -45,12 +45,20 @@ docker-compose -f docker-compose.dev.yml up --build
 
 This requires `trucoshi-rs` checked out next to this repo (so `../trucoshi-rs` exists).
 
-## Auth (current status)
+## Auth / guest
 
-For now the login screen is a **placeholder**: paste an `accessToken` (JWT).
+WS v2 supports:
 
-- WS v2 requires: `Authorization: Bearer <accessToken>`
-- Web note: browser WebSockets can’t set custom headers; we’ll solve this later.
+- **Guest mode**: connect to `/v2/ws` with no auth header.
+- **Authenticated mode**: connect with `Authorization: Bearer <access_token>`.
+
+The app currently supports:
+
+- Guest entry (pick a display name)
+- `/v1/auth/login` + `/v1/auth/register`
+- Dev token paste (skips HTTP login)
+
+Web note: browser WebSockets can’t set custom headers, so **authenticated WS on web is currently disabled** (use guest mode).
 
 ## Assets
 

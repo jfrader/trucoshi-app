@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../services/auth_service.dart';
 
@@ -225,6 +226,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             widget.auth.continueAsGuest(
                               displayName: _nameCtrl.text,
                             );
+                            if (mounted) context.go('/lobby');
                           },
                     child: const Text('Continue as guest'),
                   ),
