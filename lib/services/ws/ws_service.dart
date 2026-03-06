@@ -35,6 +35,16 @@ class WsService extends ChangeNotifier {
   int _reconnectAttempts = 0;
   bool _shouldReconnect = true;
 
+  Timer? _pingTimer;
+
+  String? _sessionId;
+  String? _serverVersion;
+  int? _lastPongRttMs;
+
+  String? get sessionId => _sessionId;
+  String? get serverVersion => _serverVersion;
+  int? get lastPongRttMs => _lastPongRttMs;
+
   int _reqSeq = 0;
 
   WsConnectionState _state = WsConnectionState.disconnected;
@@ -63,9 +73,17 @@ class WsService extends ChangeNotifier {
       return;
     }
 
+    if (kIsWeb && !isGuest) {
+      _lastError =
+          'WS auth on web is not supported yet (browsers cannot send Authorization headers). Use guest mode.';
+      notifyListeners();
+      return;
+    }
+
     _setState(WsConnectionState.connecting);
     _lastError = null;
     _cancelReconnectTimer();
+    _cancelPingTimer();
 
     final uri = AppConfig.wsV2Uri();
 
@@ -75,6 +93,10 @@ class WsService extends ChangeNotifier {
 
     await _channel?.sink.close();
     _channel = null;
+
+    _sessionId = null;
+    _serverVersion = null;
+    _lastPongRttMs = null;
 
     try {
       final headers = isGuest
@@ -90,6 +112,7 @@ class WsService extends ChangeNotifier {
           try {
             final decoded = jsonDecode(event as String) as Map<String, Object?>;
             final frame = WsOutFrame.fromJson(decoded);
+            _handleSystemFrame(frame);
             _incoming.add(frame);
           } catch (e) {
             _lastError = 'Failed to decode WS frame: $e';
@@ -107,6 +130,7 @@ class WsService extends ChangeNotifier {
 
       _reconnectAttempts = 0;
       _setState(WsConnectionState.connected);
+      _startPingLoop();
     } catch (e) {
       _lastError = 'WS connect failed: $e';
       _setState(WsConnectionState.disconnected);
@@ -123,6 +147,11 @@ class WsService extends ChangeNotifier {
       _shouldReconnect = false;
     }
     _cancelReconnectTimer();
+    _cancelPingTimer();
+
+    _sessionId = null;
+    _serverVersion = null;
+    _lastPongRttMs = null;
 
     await _sub?.cancel();
     _sub = null;
@@ -164,6 +193,67 @@ class WsService extends ChangeNotifier {
     return future;
   }
 
+  void _startPingLoop() {
+    if (_pingTimer != null) return;
+    if (_state != WsConnectionState.connected) return;
+
+    void sendPing() {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      send(WsInFrame(msg: WsMsg.ping(clientTimeMs: nowMs)));
+    }
+
+    // Immediately ping once on connect for faster liveness/RTT feedback.
+    sendPing();
+
+    _pingTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) {
+        if (_state != WsConnectionState.connected) return;
+        sendPing();
+      },
+    );
+  }
+
+  void _cancelPingTimer() {
+    _pingTimer?.cancel();
+    _pingTimer = null;
+  }
+
+  void _handleSystemFrame(WsOutFrame frame) {
+    final type = frame.msg.type;
+    final data = frame.msg.data;
+
+    if (type == 'hello' && data != null) {
+      final nextSessionId = data['session_id'] as String?;
+      final nextServerVersion = data['server_version'] as String?;
+
+      var changed = false;
+      if (nextSessionId != null && nextSessionId != _sessionId) {
+        _sessionId = nextSessionId;
+        changed = true;
+      }
+      if (nextServerVersion != null && nextServerVersion != _serverVersion) {
+        _serverVersion = nextServerVersion;
+        changed = true;
+      }
+
+      if (changed) notifyListeners();
+      return;
+    }
+
+    if (type == 'pong' && data != null) {
+      final clientTimeMs = data['client_time_ms'];
+      if (clientTimeMs is int) {
+        final rtt = DateTime.now().millisecondsSinceEpoch - clientTimeMs;
+        if (rtt != _lastPongRttMs) {
+          _lastPongRttMs = rtt;
+          notifyListeners();
+        }
+      }
+      return;
+    }
+  }
+
   void _setState(WsConnectionState s) {
     if (s == _state) return;
     _state = s;
@@ -180,8 +270,14 @@ class WsService extends ChangeNotifier {
     await _sub?.cancel();
     _sub = null;
 
+    _cancelPingTimer();
+
     await _channel?.sink.close();
     _channel = null;
+
+    _sessionId = null;
+    _serverVersion = null;
+    _lastPongRttMs = null;
 
     _setState(WsConnectionState.disconnected);
 
