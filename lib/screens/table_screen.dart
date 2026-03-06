@@ -42,6 +42,9 @@ class _TableScreenState extends State<TableScreen> {
 
     widget.ws.addListener(_onWsChanged);
 
+    // Table UX: ensure we're connected (no-op if already connected).
+    unawaited(widget.ws.connect());
+
     if (widget.ws.state == WsConnectionState.connected) {
       _refreshAll();
     }

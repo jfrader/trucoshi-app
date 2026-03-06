@@ -37,6 +37,9 @@ class _MatchScreenState extends State<MatchScreen> {
 
     widget.ws.addListener(_onWsChanged);
 
+    // Ensure we're connected (no-op if already connected).
+    unawaited(widget.ws.connect());
+
     // Always refresh snapshot on entry.
     if (widget.ws.state == WsConnectionState.connected) {
       widget.ws.send(WsInFrame(msg: WsMsg.matchSnapshotGet(matchId: widget.matchId)));
