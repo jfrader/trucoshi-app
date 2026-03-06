@@ -1,0 +1,27 @@
+# syntax=docker/dockerfile:1
+
+# Build the Flutter web app.
+#
+# Usage:
+#   docker build -f Dockerfile.web --build-arg TRUCOSHI_BACKEND_URL=http://localhost:2992 -t trucoshi-app-web:dev .
+
+FROM ghcr.io/cirruslabs/flutter:stable AS build
+
+WORKDIR /app
+
+COPY pubspec.yaml pubspec.lock ./
+RUN flutter pub get
+
+COPY . .
+
+ARG TRUCOSHI_BACKEND_URL=http://localhost:2992
+
+# Web build. Note: dart-define is compile-time.
+RUN flutter build web --release --dart-define=TRUCOSHI_BACKEND_URL=${TRUCOSHI_BACKEND_URL}
+
+
+FROM nginx:alpine AS runtime
+
+COPY --from=build /app/build/web /usr/share/nginx/html
+
+EXPOSE 80

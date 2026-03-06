@@ -31,3 +31,4 @@ Backend target is the Rust monorepo `github.com/jfrader/trucoshi-rs`.
 - Auth/login flow placeholder (enough to obtain an access token).
 - WS v2 client layer (connect/reconnect, envelope encode/decode, correlation ids).
 - Table screen skeleton (seats + center trick area + hand/action bar + chat/commands bottom sheet).
+- Dev environment: run backend + web preview together via Docker Compose.

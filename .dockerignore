@@ -1,0 +1,13 @@
+.git
+.dart_tool
+build
+**/.dart_tool
+**/build
+android/.gradle
+ios/Pods
+linux/flutter/ephemeral
+macos/Flutter/ephemeral
+windows/flutter/ephemeral
+# editor
+.idea
+*.iml
