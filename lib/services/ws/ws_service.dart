@@ -11,6 +11,11 @@ import '../auth_service.dart';
 import 'v2_types.dart';
 import 'ws_connector.dart';
 
+typedef WsChannelFactory = WebSocketChannel Function(
+  Uri uri, {
+  Map<String, String>? headers,
+});
+
 enum WsConnectionState {
   disconnected,
   connecting,
@@ -18,9 +23,13 @@ enum WsConnectionState {
 }
 
 class WsService extends ChangeNotifier {
-  WsService({required AuthService auth, PlatformCaps? caps})
-      : _auth = auth,
-        _caps = caps ?? PlatformCaps.current() {
+  WsService({
+    required AuthService auth,
+    PlatformCaps? caps,
+    WsChannelFactory? channelFactory,
+  })  : _auth = auth,
+        _caps = caps ?? PlatformCaps.current(),
+        _channelFactory = channelFactory ?? connectWs {
     _lastAuthToken = _auth.accessToken;
     _lastIsGuest = _auth.isGuest;
     _auth.addListener(_onAuthChanged);
@@ -28,6 +37,7 @@ class WsService extends ChangeNotifier {
 
   final AuthService _auth;
   final PlatformCaps _caps;
+  final WsChannelFactory _channelFactory;
 
   String? _lastAuthToken;
   bool _lastIsGuest = false;
@@ -109,7 +119,7 @@ class WsService extends ChangeNotifier {
               'Authorization': 'Bearer $token',
             };
 
-      _channel = connectWs(uri, headers: headers);
+      _channel = _channelFactory(uri, headers: headers);
 
       _sub = _channel!.stream.listen(
         (event) {

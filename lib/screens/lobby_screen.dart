@@ -8,6 +8,35 @@ import '../services/auth_service.dart';
 import '../services/ws/v2_types.dart';
 import '../services/ws/ws_service.dart';
 
+enum _TeamChoice {
+  auto,
+  team0,
+  team1,
+}
+
+int? _teamFromChoice(_TeamChoice c) {
+  return switch (c) {
+    _TeamChoice.auto => null,
+    _TeamChoice.team0 => 0,
+    _TeamChoice.team1 => 1,
+  };
+}
+
+int? _readMaxPlayers(Map<String, Object?> match) {
+  final direct = match['max_players'];
+  if (direct is int) return direct;
+  if (direct is num) return direct.toInt();
+
+  final opts = match['options'];
+  if (opts is Map) {
+    final v = opts['max_players'];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+  }
+
+  return null;
+}
+
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key, required this.auth, required this.ws, required this.caps});
 
@@ -116,7 +145,72 @@ class _LobbyScreenState extends State<LobbyScreen> {
     _guestNameCtrl.text = widget.auth.displayName;
   }
 
-  Future<void> _joinMatch(BuildContext context, {required String matchId}) async {
+  Future<void> _showJoinMatchDialog(
+    BuildContext context, {
+    required String matchId,
+  }) async {
+    var teamChoice = _TeamChoice.auto;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setLocalState) {
+            return AlertDialog(
+              title: const Text('Join match'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Joining as: ${widget.auth.displayName}'),
+                  const SizedBox(height: 12),
+                  const Text('Team (optional):'),
+                  const SizedBox(height: 8),
+                  SegmentedButton<_TeamChoice>(
+                    segments: const [
+                      ButtonSegment(value: _TeamChoice.auto, label: Text('Auto')),
+                      ButtonSegment(value: _TeamChoice.team0, label: Text('Team 0')),
+                      ButtonSegment(value: _TeamChoice.team1, label: Text('Team 1')),
+                    ],
+                    selected: {teamChoice},
+                    onSelectionChanged: (set) {
+                      setLocalState(() {
+                        teamChoice = set.first;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Join'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (ok != true) return;
+
+    await _joinMatch(
+      context,
+      matchId: matchId,
+      team: _teamFromChoice(teamChoice),
+    );
+  }
+
+  Future<void> _joinMatch(
+    BuildContext context, {
+    required String matchId,
+    int? team,
+  }) async {
     final actionId = 'join-${DateTime.now().microsecondsSinceEpoch}';
     setState(() {
       _pendingActionId = actionId;
@@ -129,6 +223,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
         msg: WsMsg.matchJoin(
           matchId: matchId,
           name: widget.auth.displayName,
+          team: team,
         ),
       ),
     );
@@ -136,46 +231,69 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
   Future<void> _showCreateMatchDialog(BuildContext context) async {
     int maxPlayers = 2;
+    var teamChoice = _TeamChoice.auto;
 
     final created = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Create match'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('You will create as: ${widget.auth.displayName}'),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<int>(
-                initialValue: maxPlayers,
-                decoration: const InputDecoration(
-                  labelText: 'Max players',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 2, child: Text('2 (1v1)')),
-                  DropdownMenuItem(value: 4, child: Text('4 (2v2)')),
-                  DropdownMenuItem(value: 6, child: Text('6 (3v3)')),
+        return StatefulBuilder(
+          builder: (context, setLocalState) {
+            return AlertDialog(
+              title: const Text('Create match'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('You will create as: ${widget.auth.displayName}'),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    value: maxPlayers,
+                    decoration: const InputDecoration(
+                      labelText: 'Max players',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 2, child: Text('2 (1v1)')),
+                      DropdownMenuItem(value: 4, child: Text('4 (2v2)')),
+                      DropdownMenuItem(value: 6, child: Text('6 (3v3)')),
+                    ],
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setLocalState(() {
+                        maxPlayers = v;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('Team (optional):'),
+                  const SizedBox(height: 8),
+                  SegmentedButton<_TeamChoice>(
+                    segments: const [
+                      ButtonSegment(value: _TeamChoice.auto, label: Text('Auto')),
+                      ButtonSegment(value: _TeamChoice.team0, label: Text('Team 0')),
+                      ButtonSegment(value: _TeamChoice.team1, label: Text('Team 1')),
+                    ],
+                    selected: {teamChoice},
+                    onSelectionChanged: (set) {
+                      setLocalState(() {
+                        teamChoice = set.first;
+                      });
+                    },
+                  ),
                 ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  maxPlayers = v;
-                },
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Create'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Create'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -194,6 +312,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
         msg: WsMsg.matchCreate(
           name: widget.auth.displayName,
           maxPlayers: maxPlayers,
+          team: _teamFromChoice(teamChoice),
           // Let the server use defaults for the rest.
         ),
       ),
@@ -443,12 +562,26 @@ class _LobbyScreenState extends State<LobbyScreen> {
                         .toList() ??
                     const <String>[];
 
+                final maxPlayers = _readMaxPlayers(m);
+                final needsTeamChoice = (maxPlayers ?? 2) >= 4;
+
+                final sizeLabel = maxPlayers == null
+                    ? ''
+                    : ' • ${players.length}/$maxPlayers';
+                final namesLabel = players.isEmpty ? '' : ' • ${players.join(', ')}';
+
                 return Card(
                   child: ListTile(
                     title: Text('Match $id'),
-                    subtitle: Text('$phase • ${players.join(', ')}'),
+                    subtitle: Text('$phase$sizeLabel$namesLabel'),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => unawaited(_joinMatch(context, matchId: id)),
+                    onTap: () {
+                      if (needsTeamChoice) {
+                        unawaited(_showJoinMatchDialog(context, matchId: id));
+                      } else {
+                        unawaited(_joinMatch(context, matchId: id));
+                      }
+                    },
                   ),
                 );
               },
