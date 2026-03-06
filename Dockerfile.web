@@ -18,6 +18,7 @@ ARG TRUCOSHI_BACKEND_URL=http://localhost:2992
 
 # Web build. Note: dart-define is compile-time.
 RUN flutter build web --release \
+  --pwa-strategy=none \
   --dart-define=TRUCOSHI_BACKEND_URL=${TRUCOSHI_BACKEND_URL}
 
 
