@@ -23,6 +23,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
   List<Map<String, Object?>> _matches = const [];
 
+  String? _pendingActionId;
+  String? _pendingMatchId;
+
   @override
   void initState() {
     super.initState();
@@ -47,17 +50,21 @@ class _LobbyScreenState extends State<LobbyScreen> {
   }
 
   Future<void> _joinMatch(BuildContext context, {required String matchId}) async {
+    final actionId = 'join-${DateTime.now().microsecondsSinceEpoch}';
+    setState(() {
+      _pendingActionId = actionId;
+      _pendingMatchId = matchId;
+    });
+
     widget.ws.send(
       WsInFrame(
+        id: actionId,
         msg: WsMsg.matchJoin(
           matchId: matchId,
           name: widget.auth.displayName,
         ),
       ),
     );
-
-    if (!context.mounted) return;
-    context.go('/match/$matchId');
   }
 
   Future<void> _showCreateMatchDialog(BuildContext context) async {
@@ -108,8 +115,15 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
     if (created != true) return;
 
+    final actionId = 'create-${DateTime.now().microsecondsSinceEpoch}';
+    setState(() {
+      _pendingActionId = actionId;
+      _pendingMatchId = null;
+    });
+
     widget.ws.send(
       WsInFrame(
+        id: actionId,
         msg: WsMsg.matchCreate(
           name: widget.auth.displayName,
           maxPlayers: maxPlayers,
@@ -125,6 +139,41 @@ class _LobbyScreenState extends State<LobbyScreen> {
     if (data == null) return;
 
     switch (type) {
+      case 'match.snapshot':
+        // If this is the result of a create/join action, navigate to the match.
+        if (_pendingActionId != null && frame.id == _pendingActionId) {
+          final match = (data['match'] as Map?)?.cast<String, Object?>();
+          final matchId = match?['id'] as String?;
+
+          if (matchId != null &&
+              (_pendingMatchId == null || _pendingMatchId == matchId)) {
+            setState(() {
+              _pendingActionId = null;
+              _pendingMatchId = null;
+            });
+
+            if (!mounted) return;
+            context.go('/match/$matchId');
+          }
+        }
+        return;
+
+      case 'error':
+        if (_pendingActionId != null && frame.id == _pendingActionId) {
+          final code = data['code'] as String?;
+          final msg = data['message'] as String?;
+          setState(() {
+            _pendingActionId = null;
+            _pendingMatchId = null;
+          });
+
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${code ?? 'ERROR'}: ${msg ?? 'request failed'}')),
+          );
+        }
+        return;
+
       case 'lobby.snapshot':
         final matches = (data['matches'] as List?)
                 ?.whereType<Map>()
