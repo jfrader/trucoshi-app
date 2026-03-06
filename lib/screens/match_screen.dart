@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../services/ws/v2_types.dart';
 import '../services/ws/ws_service.dart';
@@ -28,6 +29,7 @@ class _MatchScreenState extends State<MatchScreen> {
   Map<String, Object?>? _game;
 
   String? _lastPhase;
+  bool _navigatedToTable = false;
 
   @override
   void initState() {
@@ -69,22 +71,49 @@ class _MatchScreenState extends State<MatchScreen> {
         _lastPhase = phase ?? _lastPhase;
       });
 
-      // When match starts, proactively fetch gameplay snapshot.
-      if (phase == 'started' && prevPhase != 'started' && _game == null) {
+      // When match starts, proactively fetch gameplay snapshot and move to table.
+      if (phase == 'started' && _game == null) {
         if (widget.ws.state == WsConnectionState.connected) {
           widget.ws.send(WsInFrame(msg: WsMsg.gameSnapshotGet(matchId: widget.matchId)));
         }
+      }
+
+      if (phase == 'started' && prevPhase != 'started' && !_navigatedToTable) {
+        _navigatedToTable = true;
+        if (!mounted) return;
+        context.go('/table/${widget.matchId}');
       }
 
       return;
     }
 
     if (type == 'game.snapshot' || type == 'game.update') {
+      final matchId = data['match_id'] as String?;
+      if (matchId != null && matchId != widget.matchId) return;
+
       final g = (data['game'] as Map?)?.cast<String, Object?>();
       if (g == null) return;
       setState(() {
         _game = g;
       });
+      return;
+    }
+
+    if (type == 'match.left') {
+      final matchId = data['match_id'] as String?;
+      if (matchId != widget.matchId) return;
+      if (!mounted) return;
+      context.go('/lobby');
+      return;
+    }
+
+    if (type == 'error') {
+      final code = data['code'] as String?;
+      final msg = data['message'] as String?;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${code ?? 'ERROR'}: ${msg ?? 'request failed'}')),
+      );
       return;
     }
   }
@@ -123,6 +152,24 @@ class _MatchScreenState extends State<MatchScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Match ${widget.matchId}'),
+        actions: [
+          IconButton(
+            tooltip: 'Open table',
+            onPressed: () => context.go('/table/${widget.matchId}'),
+            icon: const Icon(Icons.table_restaurant),
+          ),
+          IconButton(
+            tooltip: 'Leave match',
+            onPressed: widget.ws.state == WsConnectionState.connected
+                ? () {
+                    widget.ws.send(
+                      WsInFrame(msg: WsMsg.matchLeave(matchId: widget.matchId)),
+                    );
+                  }
+                : null,
+            icon: const Icon(Icons.exit_to_app),
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),

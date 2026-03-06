@@ -147,12 +147,75 @@ class WsMsg {
         },
       );
 
+  static WsMsg matchLeave({required String matchId}) => WsMsg(
+        type: 'match.leave',
+        data: {
+          'match_id': matchId,
+        },
+      );
+
+  static WsMsg matchPause({required String matchId}) => WsMsg(
+        type: 'match.pause',
+        data: {
+          'match_id': matchId,
+        },
+      );
+
+  static WsMsg matchResume({required String matchId}) => WsMsg(
+        type: 'match.resume',
+        data: {
+          'match_id': matchId,
+        },
+      );
+
   static WsMsg gameSnapshotGet({
     required String matchId,
   }) => WsMsg(
         type: 'game.snapshot.get',
         data: {
           'match_id': matchId,
+        },
+      );
+
+  static WsMsg gamePlayCard({
+    required String matchId,
+    required int cardIdx,
+  }) => WsMsg(
+        type: 'game.play_card',
+        data: {
+          'match_id': matchId,
+          'card_idx': cardIdx,
+        },
+      );
+
+  static WsMsg gameSay({
+    required String matchId,
+    required String command,
+  }) => WsMsg(
+        type: 'game.say',
+        data: {
+          'match_id': matchId,
+          'command': command,
+        },
+      );
+
+  static WsMsg chatJoin({
+    required String roomId,
+  }) => WsMsg(
+        type: 'chat.join',
+        data: {
+          'room_id': roomId,
+        },
+      );
+
+  static WsMsg chatSay({
+    required String roomId,
+    required String content,
+  }) => WsMsg(
+        type: 'chat.say',
+        data: {
+          'room_id': roomId,
+          'content': content,
         },
       );
 }

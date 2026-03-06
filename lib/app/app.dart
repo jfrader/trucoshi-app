@@ -55,17 +55,10 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
           },
         ),
         GoRoute(
-          path: '/table',
+          path: '/table/:id',
           builder: (context, state) {
-            final q = state.uri.queryParameters;
-            final me = q['me'] ?? 'me';
-            final players = (q['players'] ?? 'me,p2,p3,p4')
-                .split(',')
-                .map((e) => e.trim())
-                .where((e) => e.isNotEmpty)
-                .toList();
-
-            return TableScreen(localPlayerId: me, playerNames: players);
+            final id = state.pathParameters['id']!;
+            return TableScreen(ws: _ws, matchId: id);
           },
         ),
       ],

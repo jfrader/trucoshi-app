@@ -32,6 +32,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
     widget.ws.addListener(_onWsChanged);
 
+    // Lobby UX: attempt to connect automatically. Guest mode is supported.
+    unawaited(widget.ws.connect());
+
     _sub = widget.ws.incoming.listen((frame) {
       setState(() {
         _log = '${frame.msg.type}\n$_log';
@@ -251,22 +254,16 @@ class _LobbyScreenState extends State<LobbyScreen> {
               runSpacing: 8,
               children: [
                 FilledButton(
-                  onPressed: () => unawaited(widget.ws.connect()),
-                  child: const Text('Connect /v2/ws'),
-                ),
-                OutlinedButton(
-                  onPressed: () => unawaited(widget.ws.disconnect()),
-                  child: const Text('Disconnect'),
+                  onPressed: widget.ws.state == WsConnectionState.connected
+                      ? null
+                      : () => unawaited(widget.ws.connect()),
+                  child: const Text('Connect'),
                 ),
                 OutlinedButton(
                   onPressed: widget.ws.state == WsConnectionState.connected
-                      ? () {
-                          widget.ws.send(
-                            WsInFrame(msg: WsMsg.ping(clientTimeMs: 0)),
-                          );
-                        }
+                      ? () => unawaited(widget.ws.disconnect())
                       : null,
-                  child: const Text('ping'),
+                  child: const Text('Disconnect'),
                 ),
                 OutlinedButton(
                   onPressed: widget.ws.state == WsConnectionState.connected
@@ -276,31 +273,13 @@ class _LobbyScreenState extends State<LobbyScreen> {
                           );
                         }
                       : null,
-                  child: const Text('lobby.snapshot.get'),
+                  child: const Text('Refresh lobby'),
                 ),
                 FilledButton.tonal(
                   onPressed: widget.ws.state == WsConnectionState.connected
                       ? () => unawaited(_showCreateMatchDialog(context))
                       : null,
                   child: const Text('Create match'),
-                ),
-                OutlinedButton(
-                  onPressed: () {
-                    context.go('/table?me=me&players=me,p2');
-                  },
-                  child: const Text('Table (2p mock)'),
-                ),
-                OutlinedButton(
-                  onPressed: () {
-                    context.go('/table?me=me&players=me,p2,p3,p4');
-                  },
-                  child: const Text('Table (4p mock)'),
-                ),
-                OutlinedButton(
-                  onPressed: () {
-                    context.go('/table?me=me&players=me,p2,p3,p4,p5,p6');
-                  },
-                  child: const Text('Table (6p mock)'),
                 ),
               ],
             ),
