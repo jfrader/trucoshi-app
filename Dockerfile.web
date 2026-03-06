@@ -15,9 +15,13 @@ RUN flutter pub get
 COPY . .
 
 ARG TRUCOSHI_BACKEND_URL=http://localhost:2992
+# Prefer HTML renderer for easier debugging/automation; can be overridden.
+ARG WEB_RENDERER=html
 
 # Web build. Note: dart-define is compile-time.
-RUN flutter build web --release --dart-define=TRUCOSHI_BACKEND_URL=${TRUCOSHI_BACKEND_URL}
+RUN flutter build web --release \
+  --web-renderer=${WEB_RENDERER} \
+  --dart-define=TRUCOSHI_BACKEND_URL=${TRUCOSHI_BACKEND_URL}
 
 
 FROM nginx:alpine AS runtime
