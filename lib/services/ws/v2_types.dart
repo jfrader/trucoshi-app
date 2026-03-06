@@ -69,7 +69,7 @@ class WsMsg {
   // Common helpers
   static WsMsg ping({required int clientTimeMs}) => WsMsg(
         type: 'ping',
-        data: {'clientTimeMs': clientTimeMs},
+        data: {'client_time_ms': clientTimeMs},
       );
 
   static WsMsg lobbySnapshotGet() => WsMsg(
@@ -79,6 +79,6 @@ class WsMsg {
 
   static WsMsg matchSnapshotGet({required String matchId}) => WsMsg(
         type: 'match.snapshot.get',
-        data: {'matchId': matchId},
+        data: {'match_id': matchId},
       );
 }
