@@ -145,6 +145,11 @@ class _TableScreenState extends State<TableScreen> {
 
     final meSeatIdx = me?['seat_idx'] as int?;
     final turnSeatIdx = _readTurnSeatIdx(game);
+    final forehandSeatIdx = _readForehandSeatIdx(game);
+
+    final myTeamIdx = _readMyTeamIdx(players, meSeatIdx);
+    final teamPoints = _readTeamPoints(match);
+    final winnerTeamIdx = _readWinnerTeamIdx(game);
 
     final myHand = _readCardList(me?['hand']);
     final myCommands = _readStringList(me?['commands']);
@@ -202,8 +207,31 @@ class _TableScreenState extends State<TableScreen> {
                   'phase=${match?['phase'] ?? '?'}'
                   '  hand_state=${handState ?? '?'}'
                   '  turn=${turnSeatIdx?.toString() ?? '?'}'
+                  '${forehandSeatIdx == null ? '' : '  forehand=$forehandSeatIdx'}'
                   '${meSeatIdx == null ? '' : '  me=$meSeatIdx'}',
                   style: const TextStyle(fontFamily: 'monospace'),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _TeamScoreChip(
+                        teamIdx: 0,
+                        points: teamPoints?[0],
+                        highlight: myTeamIdx == 0,
+                        winner: winnerTeamIdx == 0,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _TeamScoreChip(
+                        teamIdx: 1,
+                        points: teamPoints?[1],
+                        highlight: myTeamIdx == 1,
+                        winner: winnerTeamIdx == 1,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -282,7 +310,9 @@ class _TableScreenState extends State<TableScreen> {
               children: [
                 if (myCommands.isNotEmpty) ...[
                   DropdownButtonFormField<String>(
-                    value: _selectedCommand,
+                    value: myCommands.contains(_selectedCommand)
+                        ? _selectedCommand
+                        : null,
                     decoration: const InputDecoration(
                       labelText: 'Commands',
                       border: OutlineInputBorder(),
@@ -296,16 +326,18 @@ class _TableScreenState extends State<TableScreen> {
                     ],
                     onChanged: widget.ws.state == WsConnectionState.connected
                         ? (v) {
-                            setState(() {
-                              _selectedCommand = v;
-                            });
-
                             if (v == null) return;
+
                             widget.ws.send(
                               WsInFrame(
                                 msg: WsMsg.gameSay(matchId: widget.matchId, command: v),
                               ),
                             );
+
+                            // Keep the dropdown ready for the next command.
+                            setState(() {
+                              _selectedCommand = null;
+                            });
                           }
                         : null,
                   ),
@@ -465,6 +497,69 @@ class _HandCard extends StatelessWidget {
   }
 }
 
+class _TeamScoreChip extends StatelessWidget {
+  const _TeamScoreChip({
+    required this.teamIdx,
+    required this.points,
+    required this.highlight,
+    required this.winner,
+  });
+
+  final int teamIdx;
+  final int? points;
+  final bool highlight;
+  final bool winner;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    final base = teamIdx == 0 ? scheme.primary : scheme.tertiary;
+
+    final bg = winner
+        ? base.withOpacity(0.25)
+        : highlight
+            ? scheme.secondaryContainer
+            : scheme.surfaceContainerHighest;
+
+    final border = winner
+        ? Border.all(color: base, width: 2)
+        : highlight
+            ? Border.all(color: scheme.secondary, width: 2)
+            : Border.all(color: scheme.outlineVariant);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: border,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              winner ? 'Team $teamIdx • WIN' : 'Team $teamIdx',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface,
+              ),
+            ),
+          ),
+          Text(
+            (points ?? 0).toString(),
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              color: base,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Returns top-left coordinates for each seat, where seat[0] is bottom.
 ///
 /// Supports 2/4/6 players.
@@ -516,7 +611,7 @@ List<Offset> _cardPositions(int n, Size size) {
   Offset polar(double angle, double radius) =>
       Offset(center.dx + math.cos(angle) * radius, center.dy + math.sin(angle) * radius);
 
-  const cardSize = Size(88, 34);
+  const cardSize = Size(56, 84);
   Offset tl(Offset center) =>
       Offset(center.dx - cardSize.width / 2, center.dy - cardSize.height / 2);
 
@@ -576,6 +671,41 @@ String? _readHandState(Map<String, Object?>? game) {
     if (state is String) return state;
   }
 
+  return null;
+}
+
+int? _readForehandSeatIdx(Map<String, Object?>? game) {
+  if (game == null) return null;
+  final v = game['forehand_seat_idx'];
+  return v is int ? v : null;
+}
+
+int? _readWinnerTeamIdx(Map<String, Object?>? game) {
+  if (game == null) return null;
+  final v = game['winner_team_idx'];
+  return v is int ? v : null;
+}
+
+List<int>? _readTeamPoints(Map<String, Object?>? match) {
+  if (match == null) return null;
+  final raw = match['team_points'];
+  if (raw is! List || raw.length < 2) return null;
+
+  final a = raw[0];
+  final b = raw[1];
+  if (a is! num || b is! num) return null;
+
+  return [a.toInt(), b.toInt()];
+}
+
+int? _readMyTeamIdx(List<Map<String, Object?>> players, int? meSeatIdx) {
+  if (meSeatIdx == null) return null;
+  if (meSeatIdx < 0 || meSeatIdx >= players.length) return null;
+
+  final rawTeam = players[meSeatIdx]['team'];
+  if (rawTeam is int) return rawTeam;
+  if (rawTeam is num) return rawTeam.toInt();
+  if (rawTeam is String) return int.tryParse(rawTeam);
   return null;
 }
 
