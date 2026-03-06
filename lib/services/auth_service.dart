@@ -17,13 +17,22 @@ class AuthService extends ChangeNotifier {
   String? get accessToken => _accessToken;
 
   bool get isGuest => _isGuest;
-  bool get isLoggedIn => _isGuest || (_accessToken != null && _accessToken!.isNotEmpty);
+  bool get isLoggedIn =>
+      _isGuest || (_accessToken != null && _accessToken!.isNotEmpty);
 
   /// A name to use for match.create/join.
   String get displayName => _displayName ?? (_isGuest ? 'Guest' : 'Player');
 
   String? _lastError;
   String? get lastError => _lastError;
+
+  void setDisplayName(String? name) {
+    final next = name?.trim();
+    if (next == null || next.isEmpty) return;
+    if (next == _displayName) return;
+    _displayName = next;
+    notifyListeners();
+  }
 
   void setAccessToken(String? token) {
     final next = token?.trim();
@@ -33,14 +42,28 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void continueAsGuest() {
+  /// Dev-friendly: treat a pasted token as a successful login.
+  void useToken(String token, {String? displayName}) {
+    _lastError = null;
+    if (displayName != null && displayName.trim().isNotEmpty) {
+      _displayName = displayName.trim();
+    }
+    setAccessToken(token);
+  }
+
+  void continueAsGuest({String? displayName}) {
     _lastError = null;
     _accessToken = null;
     _isGuest = true;
 
-    // Generate a stable-ish guest name for this session.
-    final suffix = DateTime.now().millisecondsSinceEpoch % 1000;
-    _displayName = 'Guest$suffix';
+    final name = displayName?.trim();
+    if (name != null && name.isNotEmpty) {
+      _displayName = name;
+    } else if (_displayName == null || _displayName!.trim().isEmpty) {
+      // Generate a stable-ish guest name for this session.
+      final suffix = DateTime.now().millisecondsSinceEpoch % 1000;
+      _displayName = 'Guest$suffix';
+    }
 
     notifyListeners();
   }

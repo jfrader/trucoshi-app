@@ -19,6 +19,65 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _registerMode = false;
   bool _busy = false;
 
+  Future<void> _showTokenDialog() async {
+    final tokenCtrl = TextEditingController();
+    final nameCtrl = TextEditingController(text: _nameCtrl.text);
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Use access token'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Display name (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: tokenCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'access_token',
+                  border: OutlineInputBorder(),
+                ),
+                autocorrect: false,
+                enableSuggestions: false,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Dev: pasting a token skips /v1/auth/login and only affects WS auth.',
+                style: TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Use token'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (ok != true) return;
+
+    final token = tokenCtrl.text.trim();
+    if (token.isEmpty) return;
+
+    widget.auth.useToken(token, displayName: nameCtrl.text);
+  }
+
   @override
   void dispose() {
     _emailCtrl.dispose();
@@ -28,6 +87,26 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    final email = _emailCtrl.text.trim();
+    final password = _passwordCtrl.text;
+    final name = _nameCtrl.text.trim();
+
+    if (_registerMode) {
+      if (email.isEmpty || password.isEmpty || name.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Email, password, and name are required to register.')),
+        );
+        return;
+      }
+    } else {
+      if (email.isEmpty || password.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Email and password are required to login.')),
+        );
+        return;
+      }
+    }
+
     setState(() {
       _busy = true;
     });
@@ -35,14 +114,14 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       if (_registerMode) {
         await widget.auth.register(
-          email: _emailCtrl.text,
-          password: _passwordCtrl.text,
-          name: _nameCtrl.text,
+          email: email,
+          password: password,
+          name: name,
         );
       } else {
         await widget.auth.login(
-          email: _emailCtrl.text,
-          password: _passwordCtrl.text,
+          email: email,
+          password: password,
         );
       }
     } finally {
@@ -87,34 +166,38 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 16),
             TextField(
+              controller: _nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Display name',
+                helperText: 'Used for guest + match join/create. Login name comes from the server.',
+                border: OutlineInputBorder(),
+              ),
+              enabled: !_busy,
+            ),
+            const SizedBox(height: 12),
+            TextField(
               controller: _emailCtrl,
               decoration: const InputDecoration(
                 labelText: 'Email',
+                helperText: 'Required for login/register.',
                 border: OutlineInputBorder(),
               ),
               keyboardType: TextInputType.emailAddress,
               autocorrect: false,
+              enabled: !_busy,
             ),
             const SizedBox(height: 12),
-            if (_registerMode) ...[
-              TextField(
-                controller: _nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
             TextField(
               controller: _passwordCtrl,
               decoration: const InputDecoration(
                 labelText: 'Password',
+                helperText: 'Required for login/register.',
                 border: OutlineInputBorder(),
               ),
               obscureText: true,
               autocorrect: false,
               enableSuggestions: false,
+              enabled: !_busy,
             ),
             const SizedBox(height: 12),
             if (err != null)
@@ -132,13 +215,28 @@ class _LoginScreenState extends State<LoginScreen> {
                   : (_registerMode ? 'Create account' : 'Login')),
             ),
             const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: _busy
-                  ? null
-                  : () {
-                      widget.auth.continueAsGuest();
-                    },
-              child: const Text('Continue as guest'),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _busy
+                        ? null
+                        : () {
+                            widget.auth.continueAsGuest(
+                              displayName: _nameCtrl.text,
+                            );
+                          },
+                    child: const Text('Continue as guest'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _busy ? null : _showTokenDialog,
+                    child: const Text('Use token'),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             const Text(
