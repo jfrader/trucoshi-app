@@ -37,7 +37,8 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
             state.matchedLocation.startsWith('/match') || state.matchedLocation.startsWith('/table');
 
         if (!loggedIn && isTableOrMatch) return '/lobby';
-        if (loggedIn && goingToLogin) return '/lobby';
+        // Allow upgrading from guest -> authenticated by visiting /login.
+        if (loggedIn && goingToLogin && !_auth.isGuest) return '/lobby';
         return null;
       },
       routes: [

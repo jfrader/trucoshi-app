@@ -364,7 +364,19 @@ class _LobbyScreenState extends State<LobbyScreen> {
           ListenableBuilder(
             listenable: widget.ws,
             builder: (context, _) {
-              return Text('WS: ${widget.ws.state}');
+              final rtt = widget.ws.lastPongRttMs;
+              final ver = widget.ws.serverVersion;
+              final sid = widget.ws.sessionId;
+
+              final extras = [
+                if (ver != null) 'v=$ver',
+                if (sid != null) 'sid=$sid',
+                if (rtt != null) 'rtt=${rtt}ms',
+              ];
+
+              return Text(
+                'WS: ${widget.ws.state}${extras.isEmpty ? '' : '  •  ${extras.join("  •  ")}'}',
+              );
             },
           ),
           const SizedBox(height: 8),
@@ -468,7 +480,18 @@ class _LobbyScreenState extends State<LobbyScreen> {
               onPressed: () => context.go('/login'),
               icon: const Icon(Icons.login),
             )
-          else
+          else if (widget.auth.isGuest) ...[
+            IconButton(
+              tooltip: 'Login (upgrade from guest)',
+              onPressed: () => context.go('/login'),
+              icon: const Icon(Icons.login),
+            ),
+            IconButton(
+              tooltip: 'Logout',
+              onPressed: () => widget.auth.logout(),
+              icon: const Icon(Icons.logout),
+            ),
+          ] else
             IconButton(
               tooltip: 'Logout',
               onPressed: () => widget.auth.logout(),
