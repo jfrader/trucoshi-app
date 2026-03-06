@@ -64,6 +64,9 @@ class _MatchScreenState extends State<MatchScreen> {
       final m = (data['match'] as Map?)?.cast<String, Object?>();
       if (m == null) return;
 
+      final matchId = m['id'] as String?;
+      if (matchId != null && matchId != widget.matchId) return;
+
       final me = (data['me'] as Map?)?.cast<String, Object?>();
       final phase = m['phase'] as String?;
       final prevPhase = _lastPhase;
@@ -96,8 +99,12 @@ class _MatchScreenState extends State<MatchScreen> {
 
       final g = (data['game'] as Map?)?.cast<String, Object?>();
       if (g == null) return;
+
+      final me = (data['me'] as Map?)?.cast<String, Object?>();
+
       setState(() {
         _game = g;
+        if (me != null) _me = me;
       });
       return;
     }

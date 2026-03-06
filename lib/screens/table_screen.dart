@@ -84,6 +84,9 @@ class _TableScreenState extends State<TableScreen> {
       final match = (data['match'] as Map?)?.cast<String, Object?>();
       if (match == null) return;
 
+      final matchId = match['id'] as String?;
+      if (matchId != null && matchId != widget.matchId) return;
+
       final me = (data['me'] as Map?)?.cast<String, Object?>();
 
       setState(() {
@@ -96,13 +99,16 @@ class _TableScreenState extends State<TableScreen> {
 
     if (type == 'game.snapshot' || type == 'game.update') {
       final matchId = data['match_id'] as String?;
-      if (matchId != widget.matchId) return;
+      if (matchId != null && matchId != widget.matchId) return;
 
       final game = (data['game'] as Map?)?.cast<String, Object?>();
       if (game == null) return;
 
+      final me = (data['me'] as Map?)?.cast<String, Object?>();
+
       setState(() {
         _game = game;
+        if (me != null) _me = me;
       });
 
       return;
@@ -110,7 +116,7 @@ class _TableScreenState extends State<TableScreen> {
 
     if (type == 'match.left') {
       final matchId = data['match_id'] as String?;
-      if (matchId != widget.matchId) return;
+      if (matchId != null && matchId != widget.matchId) return;
       if (!mounted) return;
       context.go('/lobby');
       return;
