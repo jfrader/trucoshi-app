@@ -1,23 +1,36 @@
 import 'dart:convert';
 
+/// Tiny helper for tolerant parsing.
+///
+/// We use this to be resilient to schema drift / malformed frames without
+/// crashing the WS listener.
+class WsParseResult<T> {
+  const WsParseResult._(this.value, this.error);
+
+  const WsParseResult.ok(T v) : this._(v, null);
+  const WsParseResult.err(String e) : this._(null, e);
+
+  final T? value;
+  final String? error;
+
+  bool get isOk => value != null;
+}
+
 /// WS protocol v2 frame envelope (client -> server).
 ///
 /// Contract source of truth: `trucoshi-rs/schemas/ws/v2/in.json`.
 class WsInFrame {
-  WsInFrame({
-    this.id,
-    required this.msg,
-  });
+  WsInFrame({this.id, required this.msg});
 
   final int v = 2;
   final String? id;
   final WsMsg msg;
 
   Map<String, Object?> toJson() => {
-        'v': v,
-        if (id != null) 'id': id,
-        'msg': msg.toJson(),
-      };
+    'v': v,
+    if (id != null) 'id': id,
+    'msg': msg.toJson(),
+  };
 
   String encode() => jsonEncode(toJson());
 }
@@ -26,22 +39,63 @@ class WsInFrame {
 ///
 /// Contract source of truth: `trucoshi-rs/schemas/ws/v2/out.json`.
 class WsOutFrame {
-  WsOutFrame({
-    required this.v,
-    this.id,
-    required this.msg,
-  });
+  WsOutFrame({required this.v, this.id, required this.msg});
 
   final int v;
   final String? id;
   final WsMsg msg;
 
+  /// Strict parser (throws on unexpected shape).
   static WsOutFrame fromJson(Map<String, Object?> json) {
     return WsOutFrame(
       v: json['v'] as int,
       id: json['id'] as String?,
-      msg: WsMsg.fromJson(json['msg'] as Map<String, Object?>),
+      msg: WsMsg.fromJson((json['msg'] as Map).cast<String, Object?>()),
     );
+  }
+
+  /// Tolerant parser (never throws).
+  static WsParseResult<WsOutFrame> parse(Object? decoded) {
+    if (decoded is! Map) {
+      return const WsParseResult.err('expected JSON object at top-level');
+    }
+    return parseJson(decoded.cast<String, Object?>());
+  }
+
+  /// Tolerant parser (never throws).
+  static WsParseResult<WsOutFrame> parseJson(Map<String, Object?> json) {
+    final rawV = json['v'];
+    final v = switch (rawV) {
+      int n => n,
+      num n => n.toInt(),
+      _ => null,
+    };
+
+    if (v == null) {
+      return const WsParseResult.err('missing/invalid "v"');
+    }
+
+    final rawId = json['id'];
+    final id = rawId == null ? null : (rawId is String ? rawId : null);
+
+    if (rawId != null && id == null) {
+      return const WsParseResult.err('invalid "id" (expected string)');
+    }
+
+    final rawMsg = json['msg'];
+    if (rawMsg is! Map) {
+      return const WsParseResult.err('missing/invalid "msg" (expected object)');
+    }
+
+    final msgRes = WsMsg.parseJson(rawMsg.cast<String, Object?>());
+    final msg = msgRes.value;
+    if (msg == null) {
+      return WsParseResult.err(
+        'invalid "msg": ${msgRes.error ?? 'unknown error'}',
+      );
+    }
+
+    return WsParseResult.ok(WsOutFrame(v: v, id: id, msg: msg));
   }
 }
 
@@ -55,10 +109,11 @@ class WsMsg {
   final Map<String, Object?>? data;
 
   Map<String, Object?> toJson() => {
-        'type': type,
-        if (data != null) 'data': data,
-      };
+    'type': type,
+    if (data != null) 'data': data,
+  };
 
+  /// Strict parser (throws on unexpected shape).
   static WsMsg fromJson(Map<String, Object?> json) {
     final rawData = json['data'];
     return WsMsg(
@@ -67,20 +122,34 @@ class WsMsg {
     );
   }
 
+  /// Tolerant parser (never throws).
+  static WsParseResult<WsMsg> parseJson(Map<String, Object?> json) {
+    final rawType = json['type'];
+    if (rawType is! String || rawType.isEmpty) {
+      return const WsParseResult.err('missing/invalid "type"');
+    }
+
+    final rawData = json['data'];
+    Map<String, Object?>? data;
+    if (rawData == null) {
+      data = null;
+    } else if (rawData is Map) {
+      data = rawData.cast<String, Object?>();
+    } else {
+      return const WsParseResult.err('invalid "data" (expected object)');
+    }
+
+    return WsParseResult.ok(WsMsg(type: rawType, data: data));
+  }
+
   // Common helpers
-  static WsMsg ping({required int clientTimeMs}) => WsMsg(
-        type: 'ping',
-        data: {'client_time_ms': clientTimeMs},
-      );
+  static WsMsg ping({required int clientTimeMs}) =>
+      WsMsg(type: 'ping', data: {'client_time_ms': clientTimeMs});
 
-  static WsMsg lobbySnapshotGet() => WsMsg(
-        type: 'lobby.snapshot.get',
-      );
+  static WsMsg lobbySnapshotGet() => WsMsg(type: 'lobby.snapshot.get');
 
-  static WsMsg matchSnapshotGet({required String matchId}) => WsMsg(
-        type: 'match.snapshot.get',
-        data: {'match_id': matchId},
-      );
+  static WsMsg matchSnapshotGet({required String matchId}) =>
+      WsMsg(type: 'match.snapshot.get', data: {'match_id': matchId});
 
   static WsMsg matchCreate({
     required String name,
@@ -93,7 +162,10 @@ class WsMsg {
     // IMPORTANT: if we send `options`, it must be a complete `MatchOptions` object
     // (all fields required by the v2 schema). We mirror backend defaults here.
     final shouldSendOptions =
-        maxPlayers != null || matchPoints != null || flor != null || turnTimeMs != null;
+        maxPlayers != null ||
+        matchPoints != null ||
+        flor != null ||
+        turnTimeMs != null;
 
     final options = <String, Object?>{
       if (shouldSendOptions) 'max_players': maxPlayers ?? 6,
@@ -127,102 +199,39 @@ class WsMsg {
     );
   }
 
-  static WsMsg matchWatch({required String matchId}) => WsMsg(
-        type: 'match.watch',
-        data: {
-          'match_id': matchId,
-        },
-      );
+  static WsMsg matchWatch({required String matchId}) =>
+      WsMsg(type: 'match.watch', data: {'match_id': matchId});
 
-  static WsMsg matchReady({
-    required String matchId,
-    required bool ready,
-  }) => WsMsg(
-        type: 'match.ready',
-        data: {
-          'match_id': matchId,
-          'ready': ready,
-        },
-      );
+  static WsMsg matchReady({required String matchId, required bool ready}) =>
+      WsMsg(type: 'match.ready', data: {'match_id': matchId, 'ready': ready});
 
-  static WsMsg matchStart({
-    required String matchId,
-  }) => WsMsg(
-        type: 'match.start',
-        data: {
-          'match_id': matchId,
-        },
-      );
+  static WsMsg matchStart({required String matchId}) =>
+      WsMsg(type: 'match.start', data: {'match_id': matchId});
 
-  static WsMsg matchLeave({required String matchId}) => WsMsg(
-        type: 'match.leave',
-        data: {
-          'match_id': matchId,
-        },
-      );
+  static WsMsg matchLeave({required String matchId}) =>
+      WsMsg(type: 'match.leave', data: {'match_id': matchId});
 
-  static WsMsg matchPause({required String matchId}) => WsMsg(
-        type: 'match.pause',
-        data: {
-          'match_id': matchId,
-        },
-      );
+  static WsMsg matchPause({required String matchId}) =>
+      WsMsg(type: 'match.pause', data: {'match_id': matchId});
 
-  static WsMsg matchResume({required String matchId}) => WsMsg(
-        type: 'match.resume',
-        data: {
-          'match_id': matchId,
-        },
-      );
+  static WsMsg matchResume({required String matchId}) =>
+      WsMsg(type: 'match.resume', data: {'match_id': matchId});
 
-  static WsMsg gameSnapshotGet({
-    required String matchId,
-  }) => WsMsg(
-        type: 'game.snapshot.get',
-        data: {
-          'match_id': matchId,
-        },
-      );
+  static WsMsg gameSnapshotGet({required String matchId}) =>
+      WsMsg(type: 'game.snapshot.get', data: {'match_id': matchId});
 
-  static WsMsg gamePlayCard({
-    required String matchId,
-    required int cardIdx,
-  }) => WsMsg(
+  static WsMsg gamePlayCard({required String matchId, required int cardIdx}) =>
+      WsMsg(
         type: 'game.play_card',
-        data: {
-          'match_id': matchId,
-          'card_idx': cardIdx,
-        },
+        data: {'match_id': matchId, 'card_idx': cardIdx},
       );
 
-  static WsMsg gameSay({
-    required String matchId,
-    required String command,
-  }) => WsMsg(
-        type: 'game.say',
-        data: {
-          'match_id': matchId,
-          'command': command,
-        },
-      );
+  static WsMsg gameSay({required String matchId, required String command}) =>
+      WsMsg(type: 'game.say', data: {'match_id': matchId, 'command': command});
 
-  static WsMsg chatJoin({
-    required String roomId,
-  }) => WsMsg(
-        type: 'chat.join',
-        data: {
-          'room_id': roomId,
-        },
-      );
+  static WsMsg chatJoin({required String roomId}) =>
+      WsMsg(type: 'chat.join', data: {'room_id': roomId});
 
-  static WsMsg chatSay({
-    required String roomId,
-    required String content,
-  }) => WsMsg(
-        type: 'chat.say',
-        data: {
-          'room_id': roomId,
-          'content': content,
-        },
-      );
+  static WsMsg chatSay({required String roomId, required String content}) =>
+      WsMsg(type: 'chat.say', data: {'room_id': roomId, 'content': content});
 }

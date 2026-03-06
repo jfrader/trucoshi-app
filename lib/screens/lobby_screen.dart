@@ -8,11 +8,7 @@ import '../services/auth_service.dart';
 import '../services/ws/v2_types.dart';
 import '../services/ws/ws_service.dart';
 
-enum _TeamChoice {
-  auto,
-  team0,
-  team1,
-}
+enum _TeamChoice { auto, team0, team1 }
 
 int? _teamFromChoice(_TeamChoice c) {
   return switch (c) {
@@ -38,7 +34,12 @@ int? _readMaxPlayers(Map<String, Object?> match) {
 }
 
 class LobbyScreen extends StatefulWidget {
-  const LobbyScreen({super.key, required this.auth, required this.ws, required this.caps});
+  const LobbyScreen({
+    super.key,
+    required this.auth,
+    required this.ws,
+    required this.caps,
+  });
 
   final AuthService auth;
   final WsService ws;
@@ -168,9 +169,18 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   const SizedBox(height: 8),
                   SegmentedButton<_TeamChoice>(
                     segments: const [
-                      ButtonSegment(value: _TeamChoice.auto, label: Text('Auto')),
-                      ButtonSegment(value: _TeamChoice.team0, label: Text('Team 0')),
-                      ButtonSegment(value: _TeamChoice.team1, label: Text('Team 1')),
+                      ButtonSegment(
+                        value: _TeamChoice.auto,
+                        label: Text('Auto'),
+                      ),
+                      ButtonSegment(
+                        value: _TeamChoice.team0,
+                        label: Text('Team 0'),
+                      ),
+                      ButtonSegment(
+                        value: _TeamChoice.team1,
+                        label: Text('Team 1'),
+                      ),
                     ],
                     selected: {teamChoice},
                     onSelectionChanged: (set) {
@@ -287,9 +297,18 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   const SizedBox(height: 8),
                   SegmentedButton<_TeamChoice>(
                     segments: const [
-                      ButtonSegment(value: _TeamChoice.auto, label: Text('Auto')),
-                      ButtonSegment(value: _TeamChoice.team0, label: Text('Team 0')),
-                      ButtonSegment(value: _TeamChoice.team1, label: Text('Team 1')),
+                      ButtonSegment(
+                        value: _TeamChoice.auto,
+                        label: Text('Auto'),
+                      ),
+                      ButtonSegment(
+                        value: _TeamChoice.team0,
+                        label: Text('Team 0'),
+                      ),
+                      ButtonSegment(
+                        value: _TeamChoice.team1,
+                        label: Text('Team 1'),
+                      ),
                     ],
                     selected: {teamChoice},
                     onSelectionChanged: (set) {
@@ -349,7 +368,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
           final match = (data['match'] as Map?)?.cast<String, Object?>();
           final matchId = match?['id'] as String?;
 
-          if (matchId != null && (_pendingMatchId == null || _pendingMatchId == matchId)) {
+          if (matchId != null &&
+              (_pendingMatchId == null || _pendingMatchId == matchId)) {
             setState(() {
               _pendingActionId = null;
               _pendingMatchId = null;
@@ -372,13 +392,16 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${code ?? 'ERROR'}: ${msg ?? 'request failed'}')),
+            SnackBar(
+              content: Text('${code ?? 'ERROR'}: ${msg ?? 'request failed'}'),
+            ),
           );
         }
         return;
 
       case 'lobby.snapshot':
-        final matches = (data['matches'] as List?)
+        final matches =
+            (data['matches'] as List?)
                 ?.whereType<Map>()
                 .map((m) => m.cast<String, Object?>())
                 .toList() ??
@@ -432,10 +455,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Welcome',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
+          Text('Welcome', style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 8),
           Text(
             widget.caps.supportsWsAuthHeaders
@@ -573,7 +593,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 final id = (m['id'] as String?) ?? '<unknown>';
                 final phase = (m['phase'] as String?) ?? '?';
 
-                final players = (m['players'] as List?)
+                final players =
+                    (m['players'] as List?)
                         ?.whereType<Map>()
                         .map((p) => p['name'])
                         .whereType<String>()
@@ -586,7 +607,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 final sizeLabel = maxPlayers == null
                     ? ''
                     : ' • ${players.length}/$maxPlayers';
-                final namesLabel = players.isEmpty ? '' : ' • ${players.join(', ')}';
+                final namesLabel = players.isEmpty
+                    ? ''
+                    : ' • ${players.join(', ')}';
 
                 return Card(
                   child: ListTile(
@@ -596,8 +619,10 @@ class _LobbyScreenState extends State<LobbyScreen> {
                       spacing: 8,
                       children: [
                         TextButton(
-                          onPressed: widget.ws.state == WsConnectionState.connected
-                              ? () => unawaited(_watchMatch(context, matchId: id))
+                          onPressed:
+                              widget.ws.state == WsConnectionState.connected
+                              ? () =>
+                                    unawaited(_watchMatch(context, matchId: id))
                               : null,
                           child: const Text('Spectate'),
                         ),

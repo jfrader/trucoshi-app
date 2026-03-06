@@ -8,11 +8,7 @@ import '../services/ws/v2_types.dart';
 import '../services/ws/ws_service.dart';
 
 class MatchScreen extends StatefulWidget {
-  const MatchScreen({
-    super.key,
-    required this.ws,
-    required this.matchId,
-  });
+  const MatchScreen({super.key, required this.ws, required this.matchId});
 
   final WsService ws;
   final String matchId;
@@ -42,7 +38,9 @@ class _MatchScreenState extends State<MatchScreen> {
 
     // Always refresh snapshot on entry.
     if (widget.ws.state == WsConnectionState.connected) {
-      widget.ws.send(WsInFrame(msg: WsMsg.matchSnapshotGet(matchId: widget.matchId)));
+      widget.ws.send(
+        WsInFrame(msg: WsMsg.matchSnapshotGet(matchId: widget.matchId)),
+      );
     }
 
     _sub = widget.ws.incoming.listen(_handleFrame);
@@ -51,7 +49,9 @@ class _MatchScreenState extends State<MatchScreen> {
   void _onWsChanged() {
     if (!mounted) return;
     if (widget.ws.state == WsConnectionState.connected) {
-      widget.ws.send(WsInFrame(msg: WsMsg.matchSnapshotGet(matchId: widget.matchId)));
+      widget.ws.send(
+        WsInFrame(msg: WsMsg.matchSnapshotGet(matchId: widget.matchId)),
+      );
     }
   }
 
@@ -80,7 +80,9 @@ class _MatchScreenState extends State<MatchScreen> {
       // When match starts, proactively fetch gameplay snapshot and move to table.
       if (phase == 'started' && _game == null) {
         if (widget.ws.state == WsConnectionState.connected) {
-          widget.ws.send(WsInFrame(msg: WsMsg.gameSnapshotGet(matchId: widget.matchId)));
+          widget.ws.send(
+            WsInFrame(msg: WsMsg.gameSnapshotGet(matchId: widget.matchId)),
+          );
         }
       }
 
@@ -122,7 +124,9 @@ class _MatchScreenState extends State<MatchScreen> {
       final msg = data['message'] as String?;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${code ?? 'ERROR'}: ${msg ?? 'request failed'}')),
+        SnackBar(
+          content: Text('${code ?? 'ERROR'}: ${msg ?? 'request failed'}'),
+        ),
       );
       return;
     }
@@ -137,12 +141,15 @@ class _MatchScreenState extends State<MatchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final matchPretty =
-        _match == null ? '(none yet)' : const JsonEncoder.withIndent('  ').convert(_match);
-    final gamePretty =
-        _game == null ? '(none yet)' : const JsonEncoder.withIndent('  ').convert(_game);
+    final matchPretty = _match == null
+        ? '(none yet)'
+        : const JsonEncoder.withIndent('  ').convert(_match);
+    final gamePretty = _game == null
+        ? '(none yet)'
+        : const JsonEncoder.withIndent('  ').convert(_game);
 
-    final players = (_match?['players'] as List?)
+    final players =
+        (_match?['players'] as List?)
             ?.whereType<Map>()
             .map((p) => p.cast<String, Object?>())
             .toList() ??
@@ -152,12 +159,15 @@ class _MatchScreenState extends State<MatchScreen> {
     final ownerSeatIdx = _match?['owner_seat_idx'] as int?;
     final phase = _match?['phase'] as String?;
 
-    final iAmOwner = meSeatIdx != null && ownerSeatIdx != null && meSeatIdx == ownerSeatIdx;
+    final iAmOwner =
+        meSeatIdx != null && ownerSeatIdx != null && meSeatIdx == ownerSeatIdx;
     final myReady = (meSeatIdx != null && meSeatIdx < players.length)
         ? (players[meSeatIdx]['ready'] as bool?)
         : null;
 
-    final allReady = players.isNotEmpty && players.every((p) => (p['ready'] as bool?) == true);
+    final allReady =
+        players.isNotEmpty &&
+        players.every((p) => (p['ready'] as bool?) == true);
 
     return Scaffold(
       appBar: AppBar(
@@ -199,7 +209,11 @@ class _MatchScreenState extends State<MatchScreen> {
                   onPressed: widget.ws.state == WsConnectionState.connected
                       ? () {
                           widget.ws.send(
-                            WsInFrame(msg: WsMsg.matchSnapshotGet(matchId: widget.matchId)),
+                            WsInFrame(
+                              msg: WsMsg.matchSnapshotGet(
+                                matchId: widget.matchId,
+                              ),
+                            ),
                           );
                         }
                       : null,
@@ -209,14 +223,20 @@ class _MatchScreenState extends State<MatchScreen> {
                   onPressed: widget.ws.state == WsConnectionState.connected
                       ? () {
                           widget.ws.send(
-                            WsInFrame(msg: WsMsg.gameSnapshotGet(matchId: widget.matchId)),
+                            WsInFrame(
+                              msg: WsMsg.gameSnapshotGet(
+                                matchId: widget.matchId,
+                              ),
+                            ),
                           );
                         }
                       : null,
                   child: const Text('game.snapshot.get'),
                 ),
                 FilledButton(
-                  onPressed: widget.ws.state == WsConnectionState.connected && myReady != null
+                  onPressed:
+                      widget.ws.state == WsConnectionState.connected &&
+                          myReady != null
                       ? () {
                           widget.ws.send(
                             WsInFrame(
@@ -231,13 +251,16 @@ class _MatchScreenState extends State<MatchScreen> {
                   child: Text(myReady == true ? 'Set not ready' : 'Ready up'),
                 ),
                 FilledButton.tonal(
-                  onPressed: widget.ws.state == WsConnectionState.connected &&
+                  onPressed:
+                      widget.ws.state == WsConnectionState.connected &&
                           phase == 'lobby' &&
                           iAmOwner &&
                           allReady
                       ? () {
                           widget.ws.send(
-                            WsInFrame(msg: WsMsg.matchStart(matchId: widget.matchId)),
+                            WsInFrame(
+                              msg: WsMsg.matchStart(matchId: widget.matchId),
+                            ),
                           );
                         }
                       : null,
@@ -275,7 +298,9 @@ class _MatchScreenState extends State<MatchScreen> {
                     return ListTile(
                       dense: true,
                       title: Text('$idx: $name'),
-                      subtitle: Text('team=$team${tags.isEmpty ? '' : ' • ${tags.join(' • ')}'}'),
+                      subtitle: Text(
+                        'team=$team${tags.isEmpty ? '' : ' • ${tags.join(' • ')}'}',
+                      ),
                     );
                   },
                 ),
@@ -286,7 +311,10 @@ class _MatchScreenState extends State<MatchScreen> {
             const SizedBox(height: 8),
             Expanded(
               child: SingleChildScrollView(
-                child: Text(matchPretty, style: const TextStyle(fontFamily: 'monospace')),
+                child: Text(
+                  matchPretty,
+                  style: const TextStyle(fontFamily: 'monospace'),
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -294,7 +322,10 @@ class _MatchScreenState extends State<MatchScreen> {
             const SizedBox(height: 8),
             Expanded(
               child: SingleChildScrollView(
-                child: Text(gamePretty, style: const TextStyle(fontFamily: 'monospace')),
+                child: Text(
+                  gamePretty,
+                  style: const TextStyle(fontFamily: 'monospace'),
+                ),
               ),
             ),
           ],

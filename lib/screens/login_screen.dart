@@ -119,14 +119,20 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_registerMode) {
       if (email.isEmpty || password.isEmpty || name.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Email, password, and name are required to register.')),
+          const SnackBar(
+            content: Text(
+              'Email, password, and name are required to register.',
+            ),
+          ),
         );
         return;
       }
     } else {
       if (email.isEmpty || password.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Email and password are required to login.')),
+          const SnackBar(
+            content: Text('Email and password are required to login.'),
+          ),
         );
         return;
       }
@@ -144,10 +150,7 @@ class _LoginScreenState extends State<LoginScreen> {
           name: name,
         );
       } else {
-        await widget.auth.login(
-          email: email,
-          password: password,
-        );
+        await widget.auth.login(email: email, password: password);
       }
     } finally {
       if (mounted) {
@@ -245,7 +248,8 @@ class _LoginScreenState extends State<LoginScreen> {
               controller: _nameCtrl,
               decoration: const InputDecoration(
                 labelText: 'Display name',
-                helperText: 'Used for guest + match join/create. Login name comes from the server.',
+                helperText:
+                    'Used for guest + match join/create. Login name comes from the server.',
                 border: OutlineInputBorder(),
               ),
               enabled: !_busy,
@@ -286,7 +290,11 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             FilledButton(
               onPressed: _busy ? null : _submit,
-              child: Text(_busy ? 'Working…' : (_registerMode ? 'Create account' : 'Login')),
+              child: Text(
+                _busy
+                    ? 'Working…'
+                    : (_registerMode ? 'Create account' : 'Login'),
+              ),
             ),
             const SizedBox(height: 12),
             Row(

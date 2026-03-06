@@ -13,11 +13,7 @@ import '../widgets/truco_card.dart';
 /// Seating is derived from `match.players[]` ordering, rotated so `me.seat_idx`
 /// is always rendered at the bottom.
 class TableScreen extends StatefulWidget {
-  const TableScreen({
-    super.key,
-    required this.ws,
-    required this.matchId,
-  });
+  const TableScreen({super.key, required this.ws, required this.matchId});
 
   final WsService ws;
   final String matchId;
@@ -62,8 +58,12 @@ class _TableScreenState extends State<TableScreen> {
   }
 
   void _refreshAll() {
-    widget.ws.send(WsInFrame(msg: WsMsg.matchSnapshotGet(matchId: widget.matchId)));
-    widget.ws.send(WsInFrame(msg: WsMsg.gameSnapshotGet(matchId: widget.matchId)));
+    widget.ws.send(
+      WsInFrame(msg: WsMsg.matchSnapshotGet(matchId: widget.matchId)),
+    );
+    widget.ws.send(
+      WsInFrame(msg: WsMsg.gameSnapshotGet(matchId: widget.matchId)),
+    );
   }
 
   void _handleFrame(WsOutFrame frame) {
@@ -137,7 +137,8 @@ class _TableScreenState extends State<TableScreen> {
     final me = _me;
     final game = _game;
 
-    final players = (match?['players'] as List?)
+    final players =
+        (match?['players'] as List?)
             ?.whereType<Map>()
             .map((p) => p.cast<String, Object?>())
             .toList() ??
@@ -158,7 +159,8 @@ class _TableScreenState extends State<TableScreen> {
     final handState = _readHandState(game);
     final roundInfo = _readRoundInfo(game);
 
-    final canPlay = meSeatIdx != null && turnSeatIdx != null && meSeatIdx == turnSeatIdx;
+    final canPlay =
+        meSeatIdx != null && turnSeatIdx != null && meSeatIdx == turnSeatIdx;
     final canPlayCard = canPlay && handState == 'waiting_play';
 
     return Scaffold(
@@ -167,14 +169,18 @@ class _TableScreenState extends State<TableScreen> {
         actions: [
           IconButton(
             tooltip: 'Refresh',
-            onPressed: widget.ws.state == WsConnectionState.connected ? _refreshAll : null,
+            onPressed: widget.ws.state == WsConnectionState.connected
+                ? _refreshAll
+                : null,
             icon: const Icon(Icons.refresh),
           ),
           IconButton(
             tooltip: 'Leave match',
             onPressed: widget.ws.state == WsConnectionState.connected
                 ? () {
-                    widget.ws.send(WsInFrame(msg: WsMsg.matchLeave(matchId: widget.matchId)));
+                    widget.ws.send(
+                      WsInFrame(msg: WsMsg.matchLeave(matchId: widget.matchId)),
+                    );
                   }
                 : null,
             icon: const Icon(Icons.exit_to_app),
@@ -202,7 +208,9 @@ class _TableScreenState extends State<TableScreen> {
                   const SizedBox(height: 6),
                   Text(
                     _lastError!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 6),
@@ -260,13 +268,16 @@ class _TableScreenState extends State<TableScreen> {
                       return ((raw % n) + n) % n;
                     }
 
-                    final playedCards = roundInfo?.cards ?? const <Map<String, Object?>>[];
+                    final playedCards =
+                        roundInfo?.cards ?? const <Map<String, Object?>>[];
 
                     return Stack(
                       children: [
                         Positioned.fill(
                           child: Container(
-                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
                             child: const Center(
                               child: Text(
                                 'TABLE',
@@ -275,12 +286,28 @@ class _TableScreenState extends State<TableScreen> {
                             ),
                           ),
                         ),
-                        for (var seatIdx = 0; seatIdx < players.length; seatIdx++)
+                        for (
+                          var seatIdx = 0;
+                          seatIdx < players.length;
+                          seatIdx++
+                        )
                           Positioned(
-                            left: seatPositions[viewIdxForSeat(seatIdx, players.length)].dx,
-                            top: seatPositions[viewIdxForSeat(seatIdx, players.length)].dy,
+                            left:
+                                seatPositions[viewIdxForSeat(
+                                      seatIdx,
+                                      players.length,
+                                    )]
+                                    .dx,
+                            top:
+                                seatPositions[viewIdxForSeat(
+                                      seatIdx,
+                                      players.length,
+                                    )]
+                                    .dy,
                             child: _Seat(
-                              name: players[seatIdx]['name'] as String? ?? 'player',
+                              name:
+                                  players[seatIdx]['name'] as String? ??
+                                  'player',
                               team: players[seatIdx]['team']?.toString() ?? '?',
                               ready: players[seatIdx]['ready'] == true,
                               isMe: meSeatIdx == seatIdx,
@@ -289,15 +316,19 @@ class _TableScreenState extends State<TableScreen> {
                           ),
                         for (final pc in playedCards)
                           Positioned(
-                            left: cardPositions[
-                                    viewIdxForSeat((pc['seat_idx'] as int?) ?? 0, players.length)]
-                                .dx,
-                            top: cardPositions[
-                                    viewIdxForSeat((pc['seat_idx'] as int?) ?? 0, players.length)]
-                                .dy,
-                            child: _PlayedCard(
-                              card: _readCardCode(pc['card']),
-                            ),
+                            left:
+                                cardPositions[viewIdxForSeat(
+                                      (pc['seat_idx'] as int?) ?? 0,
+                                      players.length,
+                                    )]
+                                    .dx,
+                            top:
+                                cardPositions[viewIdxForSeat(
+                                      (pc['seat_idx'] as int?) ?? 0,
+                                      players.length,
+                                    )]
+                                    .dy,
+                            child: _PlayedCard(card: _readCardCode(pc['card'])),
                           ),
                       ],
                     );
@@ -323,10 +354,7 @@ class _TableScreenState extends State<TableScreen> {
                     ),
                     items: [
                       for (final c in myCommands)
-                        DropdownMenuItem(
-                          value: c,
-                          child: Text(c),
-                        ),
+                        DropdownMenuItem(value: c, child: Text(c)),
                     ],
                     onChanged: widget.ws.state == WsConnectionState.connected
                         ? (v) {
@@ -334,7 +362,10 @@ class _TableScreenState extends State<TableScreen> {
 
                             widget.ws.send(
                               WsInFrame(
-                                msg: WsMsg.gameSay(matchId: widget.matchId, command: v),
+                                msg: WsMsg.gameSay(
+                                  matchId: widget.matchId,
+                                  command: v,
+                                ),
                               ),
                             );
 
@@ -357,7 +388,9 @@ class _TableScreenState extends State<TableScreen> {
                       for (var i = 0; i < myHand.length; i++)
                         _HandCard(
                           card: myHand[i],
-                          enabled: widget.ws.state == WsConnectionState.connected && canPlayCard,
+                          enabled:
+                              widget.ws.state == WsConnectionState.connected &&
+                              canPlayCard,
                           onPlay: () {
                             widget.ws.send(
                               WsInFrame(
@@ -375,7 +408,9 @@ class _TableScreenState extends State<TableScreen> {
                   const SizedBox(height: 10),
                   Text(
                     'Used:',
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Wrap(
@@ -383,12 +418,7 @@ class _TableScreenState extends State<TableScreen> {
                     runSpacing: 6,
                     children: [
                       for (final c in myUsed)
-                        TrucoCardImage(
-                          c,
-                          width: 40,
-                          height: 60,
-                          elevation: 1,
-                        ),
+                        TrucoCardImage(c, width: 40, height: 60, elevation: 1),
                     ],
                   ),
                 ],
@@ -397,9 +427,11 @@ class _TableScreenState extends State<TableScreen> {
                   canPlayCard
                       ? 'Your turn.'
                       : canPlay
-                          ? 'Waiting: $handState'
-                          : 'Waiting for other players…',
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ? 'Waiting: $handState'
+                      : 'Waiting for other players…',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -451,7 +483,9 @@ class _Seat extends StatelessWidget {
                 radius: 16,
                 backgroundColor: isMe ? scheme.primary : scheme.secondary,
                 foregroundColor: scheme.onPrimary,
-                child: Text(name.isEmpty ? '?' : name.substring(0, 1).toUpperCase()),
+                child: Text(
+                  name.isEmpty ? '?' : name.substring(0, 1).toUpperCase(),
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -459,7 +493,9 @@ class _Seat extends StatelessWidget {
                   name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontWeight: isMe ? FontWeight.bold : FontWeight.w600),
+                  style: TextStyle(
+                    fontWeight: isMe ? FontWeight.bold : FontWeight.w600,
+                  ),
                 ),
               ),
             ],
@@ -485,12 +521,7 @@ class _PlayedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TrucoCardImage(
-      card,
-      width: 56,
-      height: 84,
-      elevation: 3,
-    );
+    return TrucoCardImage(card, width: 56, height: 84, elevation: 3);
   }
 }
 
@@ -544,14 +575,14 @@ class _TeamScoreChip extends StatelessWidget {
     final bg = winner
         ? base.withOpacity(0.25)
         : highlight
-            ? scheme.secondaryContainer
-            : scheme.surfaceContainerHighest;
+        ? scheme.secondaryContainer
+        : scheme.surfaceContainerHighest;
 
     final border = winner
         ? Border.all(color: base, width: 2)
         : highlight
-            ? Border.all(color: scheme.secondary, width: 2)
-            : Border.all(color: scheme.outlineVariant);
+        ? Border.all(color: scheme.secondary, width: 2)
+        : Border.all(color: scheme.outlineVariant);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -633,8 +664,10 @@ List<Offset> _cardPositions(int n, Size size) {
   final center = Offset(w * 0.5, h * 0.50);
 
   // Slightly different radial placement than seats.
-  Offset polar(double angle, double radius) =>
-      Offset(center.dx + math.cos(angle) * radius, center.dy + math.sin(angle) * radius);
+  Offset polar(double angle, double radius) => Offset(
+    center.dx + math.cos(angle) * radius,
+    center.dy + math.sin(angle) * radius,
+  );
 
   const cardSize = Size(56, 84);
   Offset tl(Offset center) =>
@@ -703,9 +736,7 @@ _RoundInfo? _readRoundInfo(Map<String, Object?>? game) {
 
   final current = raw[currentRoundIdx];
   final cards = current is List
-      ? current
-          .whereType<Map<String, Object?>>()
-          .toList()
+      ? current.whereType<Map<String, Object?>>().toList()
       : const <Map<String, Object?>>[];
 
   return _RoundInfo(
@@ -815,5 +846,3 @@ String _readCardCode(Object? raw) {
 
   return raw.toString();
 }
-
-

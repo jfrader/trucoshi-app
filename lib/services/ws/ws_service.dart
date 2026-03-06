@@ -11,25 +11,19 @@ import '../auth_service.dart';
 import 'v2_types.dart';
 import 'ws_connector.dart';
 
-typedef WsChannelFactory = WebSocketChannel Function(
-  Uri uri, {
-  Map<String, String>? headers,
-});
+typedef WsChannelFactory =
+    WebSocketChannel Function(Uri uri, {Map<String, String>? headers});
 
-enum WsConnectionState {
-  disconnected,
-  connecting,
-  connected,
-}
+enum WsConnectionState { disconnected, connecting, connected }
 
 class WsService extends ChangeNotifier {
   WsService({
     required AuthService auth,
     PlatformCaps? caps,
     WsChannelFactory? channelFactory,
-  })  : _auth = auth,
-        _caps = caps ?? PlatformCaps.current(),
-        _channelFactory = channelFactory ?? connectWs {
+  }) : _auth = auth,
+       _caps = caps ?? PlatformCaps.current(),
+       _channelFactory = channelFactory ?? connectWs {
     _lastAuthToken = _auth.accessToken;
     _lastIsGuest = _auth.isGuest;
     _auth.addListener(_onAuthChanged);
@@ -113,11 +107,7 @@ class WsService extends ChangeNotifier {
     _lastPongRttMs = null;
 
     try {
-      final headers = isGuest
-          ? null
-          : {
-              'Authorization': 'Bearer $token',
-            };
+      final headers = isGuest ? null : {'Authorization': 'Bearer $token'};
 
       _channel = _channelFactory(uri, headers: headers);
 
@@ -126,18 +116,35 @@ class WsService extends ChangeNotifier {
           try {
             final text = _eventToText(event);
             if (text == null) {
-              _lastError = 'Failed to decode WS frame: unsupported payload type ${event.runtimeType}';
+              _lastError =
+                  'Failed to decode WS frame: unsupported payload type ${event.runtimeType}';
               notifyListeners();
               return;
             }
 
-            final decoded = jsonDecode(text) as Map<String, Object?>;
-            final frame = WsOutFrame.fromJson(decoded);
+            final decoded = jsonDecode(text);
+
+            final parsed = WsOutFrame.parse(decoded);
+            final frame = parsed.value;
+            if (frame == null) {
+              _lastError =
+                  'Failed to decode WS frame: ${parsed.error ?? 'invalid frame'}';
+              notifyListeners();
+              return;
+            }
 
             if (frame.v != 2) {
               _lastError = 'Unsupported WS protocol version: v=${frame.v}';
               notifyListeners();
               return;
+            }
+
+            // If we previously surfaced a decode error, clear it as soon as we
+            // successfully decode a frame.
+            if (_lastError != null &&
+                _lastError!.startsWith('Failed to decode WS frame')) {
+              _lastError = null;
+              notifyListeners();
             }
 
             _handleSystemFrame(frame);
@@ -211,10 +218,7 @@ class WsService extends ChangeNotifier {
 
     final rid = id ?? _nextRequestId();
 
-    final future = incoming
-        .where((f) => f.id == rid)
-        .first
-        .timeout(timeout);
+    final future = incoming.where((f) => f.id == rid).first.timeout(timeout);
 
     send(WsInFrame(id: rid, msg: msg));
 
@@ -233,13 +237,10 @@ class WsService extends ChangeNotifier {
     // Immediately ping once on connect for faster liveness/RTT feedback.
     sendPing();
 
-    _pingTimer = Timer.periodic(
-      const Duration(seconds: 20),
-      (_) {
-        if (_state != WsConnectionState.connected) return;
-        sendPing();
-      },
-    );
+    _pingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (_state != WsConnectionState.connected) return;
+      sendPing();
+    });
   }
 
   void _cancelPingTimer() {
@@ -352,7 +353,8 @@ class WsService extends ChangeNotifier {
     final nextToken = _auth.accessToken;
     final nextIsGuest = _auth.isGuest;
 
-    final credsChanged = nextToken != _lastAuthToken || nextIsGuest != _lastIsGuest;
+    final credsChanged =
+        nextToken != _lastAuthToken || nextIsGuest != _lastIsGuest;
 
     _lastAuthToken = nextToken;
     _lastIsGuest = nextIsGuest;
@@ -367,7 +369,8 @@ class WsService extends ChangeNotifier {
 
     // Switching guest<->auth (or token changes) requires a reconnect to apply
     // headers.
-    if (_state == WsConnectionState.connected || _state == WsConnectionState.connecting) {
+    if (_state == WsConnectionState.connected ||
+        _state == WsConnectionState.connecting) {
       unawaited(_restartForCredentialChange());
     } else if (_shouldReconnect) {
       unawaited(connect());

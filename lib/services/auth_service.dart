@@ -96,10 +96,7 @@ class AuthService extends ChangeNotifier {
     await _handleAuthResponse(res);
   }
 
-  Future<void> login({
-    required String email,
-    required String password,
-  }) async {
+  Future<void> login({required String email, required String password}) async {
     _lastError = null;
     notifyListeners();
 
@@ -107,10 +104,7 @@ class AuthService extends ChangeNotifier {
     final res = await _http.post(
       uri,
       headers: {'content-type': 'application/json'},
-      body: jsonEncode({
-        'email': email.trim(),
-        'password': password,
-      }),
+      body: jsonEncode({'email': email.trim(), 'password': password}),
     );
 
     await _handleAuthResponse(res);

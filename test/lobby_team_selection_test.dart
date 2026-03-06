@@ -12,7 +12,8 @@ import 'package:trucoshi_app/screens/lobby_screen.dart';
 import 'package:trucoshi_app/services/auth_service.dart';
 import 'package:trucoshi_app/services/ws/ws_service.dart';
 
-class _FakeWebSocketSink extends DelegatingStreamSink<Object?> implements WebSocketSink {
+class _FakeWebSocketSink extends DelegatingStreamSink<Object?>
+    implements WebSocketSink {
   _FakeWebSocketSink(this._controller) : super(_controller.sink);
 
   final StreamController<Object?> _controller;
@@ -44,7 +45,9 @@ class _FakeWebSocketSink extends DelegatingStreamSink<Object?> implements WebSoc
   }
 }
 
-class _FakeWebSocketChannel with StreamChannelMixin<Object?> implements WebSocketChannel {
+class _FakeWebSocketChannel
+    with StreamChannelMixin<Object?>
+    implements WebSocketChannel {
   _FakeWebSocketChannel();
 
   final _server = StreamController<Object?>.broadcast();

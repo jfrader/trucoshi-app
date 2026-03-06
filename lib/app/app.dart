@@ -41,7 +41,8 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
         final loggedIn = _auth.isLoggedIn;
         final goingToLogin = state.matchedLocation == '/login';
         final isTableOrMatch =
-            state.matchedLocation.startsWith('/match') || state.matchedLocation.startsWith('/table');
+            state.matchedLocation.startsWith('/match') ||
+            state.matchedLocation.startsWith('/table');
 
         if (!loggedIn && isTableOrMatch) return '/lobby';
         // Allow upgrading from guest -> authenticated by visiting /login.
@@ -55,7 +56,8 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
         ),
         GoRoute(
           path: '/lobby',
-          builder: (context, state) => LobbyScreen(auth: _auth, ws: _ws, caps: _caps),
+          builder: (context, state) =>
+              LobbyScreen(auth: _auth, ws: _ws, caps: _caps),
         ),
         GoRoute(
           path: '/match/:id',
@@ -95,7 +97,9 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
         // Desktop readability: increase text scale on wide screens without changing layout sizing.
         final isDesktopWide = media.size.width >= 900;
         final scaled = media.copyWith(
-          textScaler: isDesktopWide ? const TextScaler.linear(1.25) : const TextScaler.linear(1.0),
+          textScaler: isDesktopWide
+              ? const TextScaler.linear(1.25)
+              : const TextScaler.linear(1.0),
         );
 
         return MediaQuery(
