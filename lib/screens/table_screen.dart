@@ -704,8 +704,7 @@ _RoundInfo? _readRoundInfo(Map<String, Object?>? game) {
   final current = raw[currentRoundIdx];
   final cards = current is List
       ? current
-          .whereType<Map>()
-          .map((e) => e.cast<String, Object?>())
+          .whereType<Map<String, Object?>>()
           .toList()
       : const <Map<String, Object?>>[];
 
@@ -724,7 +723,7 @@ int? _readTurnSeatIdx(Map<String, Object?>? game) {
 
   final turn = game['turn'];
   if (turn is Map) {
-    final seat = (turn as Map)['seat_idx'];
+    final seat = turn['seat_idx'];
     if (seat is int) return seat;
   }
 
@@ -738,7 +737,7 @@ String? _readHandState(Map<String, Object?>? game) {
 
   final hand = game['hand'];
   if (hand is Map) {
-    final state = (hand as Map)['state'];
+    final state = hand['state'];
     if (state is String) return state;
   }
 

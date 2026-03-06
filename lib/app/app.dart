@@ -90,6 +90,19 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.red),
         useMaterial3: true,
       ),
+      builder: (context, child) {
+        final media = MediaQuery.of(context);
+        // Desktop readability: increase text scale on wide screens without changing layout sizing.
+        final isDesktopWide = media.size.width >= 900;
+        final scaled = media.copyWith(
+          textScaler: isDesktopWide ? const TextScaler.linear(1.25) : const TextScaler.linear(1.0),
+        );
+
+        return MediaQuery(
+          data: scaled,
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       routerConfig: _router,
     );
   }
