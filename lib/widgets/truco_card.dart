@@ -8,7 +8,7 @@ class TrucoCardImage extends StatelessWidget {
   const TrucoCardImage(
     this.card, {
     super.key,
-    this.deck = 'criollo',
+    this.deck = 'default',
     this.width,
     this.height,
     this.fit = BoxFit.contain,
