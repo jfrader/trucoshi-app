@@ -7,7 +7,9 @@ import '../config/app_config.dart';
 
 /// Minimal auth state holder + HTTP login/register.
 ///
-/// Backend requires `Authorization: Bearer <token>` for `/v2/ws`.
+/// WS v2 supports both:
+/// - **Guest mode**: connect to `/v2/ws` with no auth header.
+/// - **Authenticated mode**: `Authorization: Bearer <token>`.
 class AuthService extends ChangeNotifier {
   AuthService({http.Client? httpClient}) : _http = httpClient ?? http.Client();
 

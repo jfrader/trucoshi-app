@@ -68,7 +68,7 @@ class WsService extends ChangeNotifier {
     final isGuest = _auth.isGuest;
 
     if (!isGuest && (token == null || token.isEmpty)) {
-      _lastError = 'Missing access token';
+      _lastError = 'Missing access token (sign in, or continue as guest)';
       notifyListeners();
       return;
     }
@@ -110,8 +110,22 @@ class WsService extends ChangeNotifier {
       _sub = _channel!.stream.listen(
         (event) {
           try {
-            final decoded = jsonDecode(event as String) as Map<String, Object?>;
+            final text = _eventToText(event);
+            if (text == null) {
+              _lastError = 'Failed to decode WS frame: unsupported payload type ${event.runtimeType}';
+              notifyListeners();
+              return;
+            }
+
+            final decoded = jsonDecode(text) as Map<String, Object?>;
             final frame = WsOutFrame.fromJson(decoded);
+
+            if (frame.v != 2) {
+              _lastError = 'Unsupported WS protocol version: v=${frame.v}';
+              notifyListeners();
+              return;
+            }
+
             _handleSystemFrame(frame);
             _incoming.add(frame);
           } catch (e) {
@@ -311,6 +325,13 @@ class WsService extends ChangeNotifier {
   String _nextRequestId() {
     _reqSeq++;
     return 'r${DateTime.now().microsecondsSinceEpoch}-$_reqSeq';
+  }
+
+  String? _eventToText(Object? event) {
+    if (event == null) return null;
+    if (event is String) return event;
+    if (event is List<int>) return utf8.decode(event);
+    return null;
   }
 
   void _onAuthChanged() {
