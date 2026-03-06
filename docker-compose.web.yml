@@ -1,0 +1,12 @@
+services:
+  # Web preview only (build Flutter web and serve via nginx)
+  # Run the backend separately (e.g. from ../trucoshi-rs).
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        # Point this at wherever you're running the backend.
+        TRUCOSHI_BACKEND_URL: http://localhost:2992
+    ports:
+      - "8080:80"

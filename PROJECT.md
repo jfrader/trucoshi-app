@@ -22,7 +22,8 @@ Backend target is the Rust monorepo `github.com/jfrader/trucoshi-rs`.
 ## Protocol / backend contract
 
 - Realtime uses **WebSocket protocol v2** from `trucoshi-rs`.
-- `/v2/ws` requires `Authorization: Bearer <accessToken>`.
+- `/v2/ws` supports **guest mode** (no auth header) for quick "open the app and see it" workflows.
+- Authenticated mode uses: `Authorization: Bearer <access_token>`.
 - JSON schemas + generated TS types live at: `trucoshi-rs/schemas/ws/v2/`.
 
 ## Immediate milestones

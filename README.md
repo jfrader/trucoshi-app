@@ -8,43 +8,42 @@ Flutter client for Trucoshi.
 
 ## Dev quickstart
 
-### Option A: Run Flutter locally (mobile-first)
+### Option A (recommended): run each repo separately
 
-1) Run the backend (dev) in `trucoshi-rs`:
+Backend (in `trucoshi-rs`):
 
 ```bash
+cd ../trucoshi-rs
 docker-compose -f docker-compose.dev.yml up --build
 ```
 
-2) Run the app:
+Frontend (Flutter, in this repo):
 
 ```bash
 flutter pub get
 flutter run --dart-define=TRUCOSHI_BACKEND_URL=http://localhost:2992
 ```
 
-### Option B: Run backend + web preview together (Docker)
+### Option B: web preview only (Docker) + backend separately
 
-This repo includes a compose file that spins up:
+Run backend separately (same as above), then run the web preview:
 
-- Postgres
-- `trucoshi-rs` API (built from a sibling checkout)
-- Web preview (Flutter web build served by nginx)
+```bash
+docker-compose -f docker-compose.web.yml up --build
+```
 
-Requirements:
+- Backend: http://localhost:2992/healthz
+- Web preview: http://localhost:8080/
 
-- `docker`
-- `docker-compose`
-- `trucoshi-rs` checked out next to this repo (so `../trucoshi-rs` exists)
+### Option C: run backend + web preview together (single compose)
 
-Run:
+If you *want* one compose file to run everything (Postgres + API + web preview), use:
 
 ```bash
 docker-compose -f docker-compose.dev.yml up --build
 ```
 
-- Backend: http://localhost:2992/healthz
-- Web preview: http://localhost:8080/
+This requires `trucoshi-rs` checked out next to this repo (so `../trucoshi-rs` exists).
 
 ## Auth (current status)
 
