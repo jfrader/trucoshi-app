@@ -9,6 +9,10 @@ import '../config/app_config.dart';
 ///
 /// Backend requires `Authorization: Bearer <token>` for `/v2/ws`.
 class AuthService extends ChangeNotifier {
+  AuthService({http.Client? httpClient}) : _http = httpClient ?? http.Client();
+
+  final http.Client _http;
+
   String? _accessToken;
   bool _isGuest = false;
 
@@ -77,7 +81,7 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
 
     final uri = Uri.parse('${AppConfig.backendBaseUrl}/v1/auth/register');
-    final res = await http.post(
+    final res = await _http.post(
       uri,
       headers: {'content-type': 'application/json'},
       body: jsonEncode({
@@ -98,7 +102,7 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
 
     final uri = Uri.parse('${AppConfig.backendBaseUrl}/v1/auth/login');
-    final res = await http.post(
+    final res = await _http.post(
       uri,
       headers: {'content-type': 'application/json'},
       body: jsonEncode({
