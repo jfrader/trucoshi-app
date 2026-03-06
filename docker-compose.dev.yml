@@ -6,8 +6,8 @@ services:
       POSTGRES_DB: trucoshi
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
+    # NOTE: no host port published; avoids clashing with any local Postgres.
+    # Connect from other compose services via db:5432.
     volumes:
       - trucoshi_pg:/var/lib/postgresql/data
     healthcheck:
