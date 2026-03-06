@@ -90,17 +90,23 @@ class WsMsg {
     int? turnTimeMs,
     int? team,
   }) {
-    final options = <String, Object?>{};
-    if (maxPlayers != null) options['max_players'] = maxPlayers;
-    if (matchPoints != null) options['match_points'] = matchPoints;
-    if (flor != null) options['flor'] = flor;
-    if (turnTimeMs != null) options['turn_time_ms'] = turnTimeMs;
+    // IMPORTANT: if we send `options`, it must be a complete `MatchOptions` object
+    // (all fields required by the v2 schema). We mirror backend defaults here.
+    final shouldSendOptions =
+        maxPlayers != null || matchPoints != null || flor != null || turnTimeMs != null;
+
+    final options = <String, Object?>{
+      if (shouldSendOptions) 'max_players': maxPlayers ?? 6,
+      if (shouldSendOptions) 'flor': flor ?? true,
+      if (shouldSendOptions) 'match_points': matchPoints ?? 9,
+      if (shouldSendOptions) 'turn_time_ms': turnTimeMs ?? 30000,
+    };
 
     return WsMsg(
       type: 'match.create',
       data: {
         'name': name,
-        ...?(options.isEmpty ? null : {'options': options}),
+        ...?(shouldSendOptions ? {'options': options} : null),
         ...?(team == null ? null : {'team': team}),
       },
     );
