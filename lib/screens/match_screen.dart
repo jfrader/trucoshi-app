@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../services/ws/v2_types.dart';
 import '../services/ws/ws_service.dart';
+import '../widgets/status_chip.dart';
 
 class MatchScreen extends StatefulWidget {
   const MatchScreen({super.key, required this.ws, required this.matchId});
@@ -155,7 +156,9 @@ class _MatchScreenState extends State<MatchScreen> {
             .toList() ??
         const <Map<String, Object?>>[];
 
+    final spectatorCount = _readSpectatorCount(_match);
     final meSeatIdx = _me?['seat_idx'] as int?;
+    final isSpectating = meSeatIdx == null;
     final ownerSeatIdx = _match?['owner_seat_idx'] as int?;
     final phase = _match?['phase'] as String?;
 
@@ -275,6 +278,25 @@ class _MatchScreenState extends State<MatchScreen> {
                 '${meSeatIdx == null ? '  (spectating)' : ''}',
                 style: const TextStyle(fontFamily: 'monospace'),
               ),
+            if (isSpectating || (spectatorCount ?? 0) > 0) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (isSpectating)
+                    const StatusChip(
+                      icon: Icons.visibility,
+                      label: 'Spectating',
+                    ),
+                  if (spectatorCount != null)
+                    StatusChip(
+                      icon: Icons.visibility_outlined,
+                      label: 'spectators: $spectatorCount',
+                    ),
+                ],
+              ),
+            ],
             const SizedBox(height: 12),
             if (players.isNotEmpty) ...[
               const Text('Players:'),
@@ -334,3 +356,12 @@ class _MatchScreenState extends State<MatchScreen> {
     );
   }
 }
+
+int? _readSpectatorCount(Map<String, Object?>? match) {
+  if (match == null) return null;
+  final raw = match['spectator_count'];
+  if (raw is int) return raw;
+  if (raw is num) return raw.toInt();
+  return null;
+}
+

@@ -33,6 +33,13 @@ int? _readMaxPlayers(Map<String, Object?> match) {
   return null;
 }
 
+int? _readSpectatorCount(Map<String, Object?> match) {
+  final raw = match['spectator_count'];
+  if (raw is int) return raw;
+  if (raw is num) return raw.toInt();
+  return null;
+}
+
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({
     super.key,
@@ -603,10 +610,15 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
                 final maxPlayers = _readMaxPlayers(m);
                 final needsTeamChoice = (maxPlayers ?? 2) >= 4;
+                final spectatorCount = _readSpectatorCount(m);
 
                 final sizeLabel = maxPlayers == null
                     ? ''
                     : ' • ${players.length}/$maxPlayers';
+                final spectatorLabel =
+                    spectatorCount == null || spectatorCount == 0
+                        ? ''
+                        : ' • spectators: ${spectatorCount}';
                 final namesLabel = players.isEmpty
                     ? ''
                     : ' • ${players.join(', ')}';
@@ -614,7 +626,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 return Card(
                   child: ListTile(
                     title: Text('Match $id'),
-                    subtitle: Text('$phase$sizeLabel$namesLabel'),
+                    subtitle: Text('$phase$sizeLabel$spectatorLabel$namesLabel'),
                     trailing: Wrap(
                       spacing: 8,
                       children: [

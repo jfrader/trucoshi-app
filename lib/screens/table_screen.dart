@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../services/ws/v2_types.dart';
 import '../services/ws/ws_service.dart';
+import '../widgets/status_chip.dart';
 import '../widgets/truco_card.dart';
 
 /// Live table screen backed by WS v2 `match.*` + `game.*`.
@@ -144,7 +145,9 @@ class _TableScreenState extends State<TableScreen> {
             .toList() ??
         const <Map<String, Object?>>[];
 
+    final spectatorCount = _readSpectatorCount(match);
     final meSeatIdx = me?['seat_idx'] as int?;
+    final isSpectating = meSeatIdx == null;
     final turnSeatIdx = _readTurnSeatIdx(game);
     final forehandSeatIdx = _readForehandSeatIdx(game);
 
@@ -162,6 +165,13 @@ class _TableScreenState extends State<TableScreen> {
     final canPlay =
         meSeatIdx != null && turnSeatIdx != null && meSeatIdx == turnSeatIdx;
     final canPlayCard = canPlay && handState == 'waiting_play';
+    final statusText = isSpectating
+        ? 'Spectating: live view only.'
+        : canPlayCard
+            ? 'Your turn.'
+            : canPlay
+                ? 'Waiting: ${handState ?? '?'}'
+                : 'Waiting for other players…';
 
     return Scaffold(
       appBar: AppBar(
@@ -245,6 +255,25 @@ class _TableScreenState extends State<TableScreen> {
                     ),
                   ],
                 ),
+                if (isSpectating || (spectatorCount ?? 0) > 0) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (isSpectating)
+                        const StatusChip(
+                          icon: Icons.visibility,
+                          label: 'Spectating',
+                        ),
+                      if (spectatorCount != null)
+                        StatusChip(
+                          icon: Icons.visibility_outlined,
+                          label: 'spectators: $spectatorCount',
+                        ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -343,7 +372,7 @@ class _TableScreenState extends State<TableScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (myCommands.isNotEmpty) ...[
+                if (!isSpectating && myCommands.isNotEmpty) ...[
                   DropdownButtonFormField<String>(
                     value: myCommands.contains(_selectedCommand)
                         ? _selectedCommand
@@ -378,7 +407,14 @@ class _TableScreenState extends State<TableScreen> {
                   ),
                   const SizedBox(height: 12),
                 ],
-                if (myHand.isEmpty)
+                if (isSpectating)
+                  Text(
+                    'Spectating: hands and commands are hidden.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  )
+                else if (myHand.isEmpty)
                   const Text('Hand: (not available yet)')
                 else
                   Wrap(
@@ -404,7 +440,7 @@ class _TableScreenState extends State<TableScreen> {
                         ),
                     ],
                   ),
-                if (myUsed.isNotEmpty) ...[
+                if (!isSpectating && myUsed.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   Text(
                     'Used:',
@@ -424,11 +460,7 @@ class _TableScreenState extends State<TableScreen> {
                 ],
                 const SizedBox(height: 8),
                 Text(
-                  canPlayCard
-                      ? 'Your turn.'
-                      : canPlay
-                      ? 'Waiting: $handState'
-                      : 'Waiting for other players…',
+                  statusText,
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -846,3 +878,12 @@ String _readCardCode(Object? raw) {
 
   return raw.toString();
 }
+
+int? _readSpectatorCount(Map<String, Object?>? match) {
+  if (match == null) return null;
+  final raw = match['spectator_count'];
+  if (raw is int) return raw;
+  if (raw is num) return raw.toInt();
+  return null;
+}
+
