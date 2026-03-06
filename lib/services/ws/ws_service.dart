@@ -40,7 +40,9 @@ class WsService extends ChangeNotifier {
     }
 
     final token = _auth.accessToken;
-    if (token == null || token.isEmpty) {
+    final isGuest = _auth.isGuest;
+
+    if (!isGuest && (token == null || token.isEmpty)) {
       _lastError = 'Missing access token';
       notifyListeners();
       return;
@@ -54,9 +56,11 @@ class WsService extends ChangeNotifier {
     try {
       _channel = IOWebSocketChannel.connect(
         uri,
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: isGuest
+            ? null
+            : {
+                'Authorization': 'Bearer $token',
+              },
       );
 
       _sub = _channel!.stream.listen(

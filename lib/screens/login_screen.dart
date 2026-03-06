@@ -132,6 +132,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   : (_registerMode ? 'Create account' : 'Login')),
             ),
             const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: _busy
+                  ? null
+                  : () {
+                      widget.auth.continueAsGuest();
+                    },
+              child: const Text('Continue as guest'),
+            ),
+            const SizedBox(height: 12),
             const Text(
               'Dev note: backend URL comes from --dart-define=TRUCOSHI_BACKEND_URL',
               style: TextStyle(fontSize: 12),

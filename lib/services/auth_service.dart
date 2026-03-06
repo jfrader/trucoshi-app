@@ -10,18 +10,28 @@ import '../config/app_config.dart';
 /// Backend requires `Authorization: Bearer <token>` for `/v2/ws`.
 class AuthService extends ChangeNotifier {
   String? _accessToken;
+  bool _isGuest = false;
 
   String? get accessToken => _accessToken;
 
-  bool get isLoggedIn => _accessToken != null && _accessToken!.isNotEmpty;
+  bool get isGuest => _isGuest;
+  bool get isLoggedIn => _isGuest || (_accessToken != null && _accessToken!.isNotEmpty);
 
   String? _lastError;
   String? get lastError => _lastError;
 
   void setAccessToken(String? token) {
     final next = token?.trim();
-    if (next == _accessToken) return;
+    if (next == _accessToken && !_isGuest) return;
     _accessToken = next;
+    _isGuest = false;
+    notifyListeners();
+  }
+
+  void continueAsGuest() {
+    _lastError = null;
+    _accessToken = null;
+    _isGuest = true;
     notifyListeners();
   }
 
@@ -84,6 +94,7 @@ class AuthService extends ChangeNotifier {
         return;
       }
 
+      _isGuest = false;
       setAccessToken(token);
     } catch (e) {
       _lastError = 'Failed to parse auth response: $e';
@@ -93,6 +104,7 @@ class AuthService extends ChangeNotifier {
 
   void logout() {
     _lastError = null;
+    _isGuest = false;
     setAccessToken(null);
   }
 }
