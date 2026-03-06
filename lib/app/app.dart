@@ -28,13 +28,15 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
     _ws = WsService(auth: _auth);
 
     _router = GoRouter(
-      initialLocation: '/login',
+      initialLocation: '/lobby',
       refreshListenable: _auth,
       redirect: (context, state) {
         final loggedIn = _auth.isLoggedIn;
         final goingToLogin = state.matchedLocation == '/login';
+        final isTableOrMatch =
+            state.matchedLocation.startsWith('/match') || state.matchedLocation.startsWith('/table');
 
-        if (!loggedIn && !goingToLogin) return '/login';
+        if (!loggedIn && isTableOrMatch) return '/lobby';
         if (loggedIn && goingToLogin) return '/lobby';
         return null;
       },

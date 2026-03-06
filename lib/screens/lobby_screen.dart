@@ -21,6 +21,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
   StreamSubscription? _sub;
   String _log = '';
 
+  final _guestNameCtrl = TextEditingController();
+
   List<Map<String, Object?>> _matches = const [];
 
   String? _pendingActionId;
@@ -30,18 +32,42 @@ class _LobbyScreenState extends State<LobbyScreen> {
   void initState() {
     super.initState();
 
+    _guestNameCtrl.text = widget.auth.displayName;
+
+    widget.auth.addListener(_onAuthChanged);
     widget.ws.addListener(_onWsChanged);
 
-    // Lobby UX: attempt to connect automatically. Guest mode is supported.
-    unawaited(widget.ws.connect());
+    // Lobby UX: connect automatically once we have either guest mode or an
+    // access token.
+    if (widget.auth.isLoggedIn) {
+      unawaited(widget.ws.connect());
+    }
 
     _sub = widget.ws.incoming.listen((frame) {
+      if (!mounted) return;
       setState(() {
         _log = '${frame.msg.type}\n$_log';
       });
 
       _handleFrame(frame);
     });
+  }
+
+  void _onAuthChanged() {
+    if (!mounted) return;
+
+    if (!widget.auth.isLoggedIn) {
+      setState(() {
+        _matches = const [];
+        _pendingActionId = null;
+        _pendingMatchId = null;
+      });
+      return;
+    }
+
+    if (widget.ws.state == WsConnectionState.disconnected) {
+      unawaited(widget.ws.connect());
+    }
   }
 
   void _onWsChanged() {
@@ -85,6 +111,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
     if (ok != true) return;
 
     widget.auth.setDisplayName(ctrl.text);
+    _guestNameCtrl.text = widget.auth.displayName;
   }
 
   Future<void> _joinMatch(BuildContext context, {required String matchId}) async {
@@ -183,8 +210,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
           final match = (data['match'] as Map?)?.cast<String, Object?>();
           final matchId = match?['id'] as String?;
 
-          if (matchId != null &&
-              (_pendingMatchId == null || _pendingMatchId == matchId)) {
+          if (matchId != null && (_pendingMatchId == null || _pendingMatchId == matchId)) {
             setState(() {
               _pendingActionId = null;
               _pendingMatchId = null;
@@ -254,141 +280,203 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
   @override
   void dispose() {
+    widget.auth.removeListener(_onAuthChanged);
     widget.ws.removeListener(_onWsChanged);
     _sub?.cancel();
+    _guestNameCtrl.dispose();
     super.dispose();
+  }
+
+  Widget _buildUnauthedBody(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Welcome',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Pick a name and jump into the lobby as a guest, or sign in.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _guestNameCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Display name',
+              border: OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.done,
+          ),
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: () {
+              widget.auth.continueAsGuest(displayName: _guestNameCtrl.text);
+              unawaited(widget.ws.connect());
+            },
+            child: const Text('Continue as guest'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: () => context.go('/login'),
+            child: const Text('Login / Register'),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Backend URL comes from --dart-define=TRUCOSHI_BACKEND_URL',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLobbyBody(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListenableBuilder(
+            listenable: widget.auth,
+            builder: (context, _) {
+              final mode = widget.auth.isGuest ? 'guest' : 'auth';
+              return Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'You: ${widget.auth.displayName} ($mode)',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Edit display name',
+                    onPressed: () => unawaited(_showDisplayNameDialog(context)),
+                    icon: const Icon(Icons.edit),
+                  ),
+                ],
+              );
+            },
+          ),
+          ListenableBuilder(
+            listenable: widget.ws,
+            builder: (context, _) {
+              return Text('WS: ${widget.ws.state}');
+            },
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton(
+                onPressed: widget.ws.state == WsConnectionState.connected
+                    ? null
+                    : () => unawaited(widget.ws.connect()),
+                child: const Text('Connect'),
+              ),
+              OutlinedButton(
+                onPressed: widget.ws.state == WsConnectionState.connected
+                    ? () => unawaited(widget.ws.disconnect())
+                    : null,
+                child: const Text('Disconnect'),
+              ),
+              OutlinedButton(
+                onPressed: widget.ws.state == WsConnectionState.connected
+                    ? () {
+                        widget.ws.send(
+                          WsInFrame(msg: WsMsg.lobbySnapshotGet()),
+                        );
+                      }
+                    : null,
+                child: const Text('Refresh lobby'),
+              ),
+              FilledButton.tonal(
+                onPressed: widget.ws.state == WsConnectionState.connected
+                    ? () => unawaited(_showCreateMatchDialog(context))
+                    : null,
+                child: const Text('Create match'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (widget.ws.lastError != null)
+            Text(
+              widget.ws.lastError!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          const SizedBox(height: 12),
+          const Text('Lobby matches:'),
+          const SizedBox(height: 8),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _matches.length,
+              itemBuilder: (context, idx) {
+                final m = _matches[idx];
+                final id = (m['id'] as String?) ?? '<unknown>';
+                final phase = (m['phase'] as String?) ?? '?';
+
+                final players = (m['players'] as List?)
+                        ?.whereType<Map>()
+                        .map((p) => p['name'])
+                        .whereType<String>()
+                        .toList() ??
+                    const <String>[];
+
+                return Card(
+                  child: ListTile(
+                    title: Text('Match $id'),
+                    subtitle: Text('$phase • ${players.join(', ')}'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => unawaited(_joinMatch(context, matchId: id)),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text('Incoming (latest first):'),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 180,
+            child: SingleChildScrollView(
+              child: Text(
+                _log,
+                style: const TextStyle(fontFamily: 'monospace'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isLoggedIn = widget.auth.isLoggedIn;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Lobby'),
         actions: [
-          IconButton(
-            tooltip: 'Logout',
-            onPressed: () => widget.auth.logout(),
-            icon: const Icon(Icons.logout),
-          ),
+          if (!isLoggedIn)
+            IconButton(
+              tooltip: 'Login',
+              onPressed: () => context.go('/login'),
+              icon: const Icon(Icons.login),
+            )
+          else
+            IconButton(
+              tooltip: 'Logout',
+              onPressed: () => widget.auth.logout(),
+              icon: const Icon(Icons.logout),
+            ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ListenableBuilder(
-              listenable: widget.auth,
-              builder: (context, _) {
-                final mode = widget.auth.isGuest ? 'guest' : 'auth';
-                return Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'You: ${widget.auth.displayName} ($mode)',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Edit display name',
-                      onPressed: () => unawaited(_showDisplayNameDialog(context)),
-                      icon: const Icon(Icons.edit),
-                    ),
-                  ],
-                );
-              },
-            ),
-            ListenableBuilder(
-              listenable: widget.ws,
-              builder: (context, _) {
-                return Text('WS: ${widget.ws.state}');
-              },
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton(
-                  onPressed: widget.ws.state == WsConnectionState.connected
-                      ? null
-                      : () => unawaited(widget.ws.connect()),
-                  child: const Text('Connect'),
-                ),
-                OutlinedButton(
-                  onPressed: widget.ws.state == WsConnectionState.connected
-                      ? () => unawaited(widget.ws.disconnect())
-                      : null,
-                  child: const Text('Disconnect'),
-                ),
-                OutlinedButton(
-                  onPressed: widget.ws.state == WsConnectionState.connected
-                      ? () {
-                          widget.ws.send(
-                            WsInFrame(msg: WsMsg.lobbySnapshotGet()),
-                          );
-                        }
-                      : null,
-                  child: const Text('Refresh lobby'),
-                ),
-                FilledButton.tonal(
-                  onPressed: widget.ws.state == WsConnectionState.connected
-                      ? () => unawaited(_showCreateMatchDialog(context))
-                      : null,
-                  child: const Text('Create match'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (widget.ws.lastError != null)
-              Text(
-                widget.ws.lastError!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            const SizedBox(height: 12),
-            const Text('Lobby matches:'),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _matches.length,
-                itemBuilder: (context, idx) {
-                  final m = _matches[idx];
-                  final id = (m['id'] as String?) ?? '<unknown>';
-                  final phase = (m['phase'] as String?) ?? '?';
-
-                  final players = (m['players'] as List?)
-                          ?.whereType<Map>()
-                          .map((p) => p['name'])
-                          .whereType<String>()
-                          .toList() ??
-                      const <String>[];
-
-                  return Card(
-                    child: ListTile(
-                      title: Text('Match $id'),
-                      subtitle: Text('$phase • ${players.join(', ')}'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => unawaited(_joinMatch(context, matchId: id)),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text('Incoming (latest first):'),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 180,
-              child: SingleChildScrollView(
-                child: Text(
-                  _log,
-                  style: const TextStyle(fontFamily: 'monospace'),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+      body: isLoggedIn ? _buildLobbyBody(context) : _buildUnauthedBody(context),
     );
   }
 }
