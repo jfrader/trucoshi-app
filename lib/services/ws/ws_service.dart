@@ -2,11 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:web_socket_channel/io.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../config/app_config.dart';
 import '../auth_service.dart';
 import 'v2_types.dart';
+import 'ws_connector.dart';
 
 enum WsConnectionState {
   disconnected,
@@ -21,7 +22,7 @@ class WsService extends ChangeNotifier {
 
   final AuthService _auth;
 
-  IOWebSocketChannel? _channel;
+  WebSocketChannel? _channel;
   StreamSubscription? _sub;
 
   WsConnectionState _state = WsConnectionState.disconnected;
@@ -54,14 +55,13 @@ class WsService extends ChangeNotifier {
     final uri = AppConfig.wsV2Uri();
 
     try {
-      _channel = IOWebSocketChannel.connect(
-        uri,
-        headers: isGuest
-            ? null
-            : {
-                'Authorization': 'Bearer $token',
-              },
-      );
+      final headers = isGuest
+          ? null
+          : {
+              'Authorization': 'Bearer $token',
+            };
+
+      _channel = connectWs(uri, headers: headers);
 
       _sub = _channel!.stream.listen(
         (event) {
