@@ -9,4 +9,4 @@ services:
         # Point this at wherever you're running the backend.
         TRUCOSHI_BACKEND_URL: http://localhost:2992
     ports:
-      - "8080:80"
+      - "18080:80"
