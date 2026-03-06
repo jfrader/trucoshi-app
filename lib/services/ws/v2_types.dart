@@ -105,4 +105,19 @@ class WsMsg {
       },
     );
   }
+
+  static WsMsg matchJoin({
+    required String matchId,
+    required String name,
+    int? team,
+  }) {
+    return WsMsg(
+      type: 'match.join',
+      data: {
+        'match_id': matchId,
+        'name': name,
+        ...?(team == null ? null : {'team': team}),
+      },
+    );
+  }
 }

@@ -46,6 +46,56 @@ class _LobbyScreenState extends State<LobbyScreen> {
     }
   }
 
+  Future<void> _joinMatch(BuildContext context, {required String matchId}) async {
+    final nameCtrl = TextEditingController(text: 'Guest');
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Join match $matchId'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Your name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Join'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (ok != true) return;
+
+    widget.ws.send(
+      WsInFrame(
+        msg: WsMsg.matchJoin(
+          matchId: matchId,
+          name: nameCtrl.text.trim().isEmpty ? 'Guest' : nameCtrl.text.trim(),
+        ),
+      ),
+    );
+
+    if (!context.mounted) return;
+    context.go('/match/$matchId');
+  }
+
   Future<void> _showCreateMatchDialog(BuildContext context) async {
     final nameCtrl = TextEditingController(text: 'Guest');
     int maxPlayers = 2;
@@ -277,9 +327,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                       title: Text('Match $id'),
                       subtitle: Text('$phase • ${players.join(', ')}'),
                       trailing: const Icon(Icons.chevron_right),
-                      onTap: () {
-                        // TODO: join match + navigate to match/table.
-                      },
+                      onTap: () => unawaited(_joinMatch(context, matchId: id)),
                     ),
                   );
                 },

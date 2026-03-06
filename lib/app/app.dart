@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../screens/lobby_screen.dart';
 import '../screens/login_screen.dart';
+import '../screens/match_screen.dart';
 import '../screens/table_screen.dart';
 import '../services/auth_service.dart';
 import '../services/ws/ws_service.dart';
@@ -45,6 +46,13 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
         GoRoute(
           path: '/lobby',
           builder: (context, state) => LobbyScreen(auth: _auth, ws: _ws),
+        ),
+        GoRoute(
+          path: '/match/:id',
+          builder: (context, state) {
+            final id = state.pathParameters['id']!;
+            return MatchScreen(ws: _ws, matchId: id);
+          },
         ),
         GoRoute(
           path: '/table',
