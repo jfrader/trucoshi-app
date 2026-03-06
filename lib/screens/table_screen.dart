@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../services/ws/v2_types.dart';
 import '../services/ws/ws_service.dart';
+import '../widgets/truco_card.dart';
 
 /// Live table screen backed by WS v2 `match.*` + `game.*`.
 ///
@@ -143,13 +144,12 @@ class _TableScreenState extends State<TableScreen> {
         const <Map<String, Object?>>[];
 
     final meSeatIdx = me?['seat_idx'] as int?;
-    final turnSeatIdx = game?['turn_seat_idx'] as int?;
+    final turnSeatIdx = _readTurnSeatIdx(game);
 
-    final myHand = (me?['hand'] as List?)?.whereType<String>().toList() ?? const <String>[];
-    final myCommands =
-        (me?['commands'] as List?)?.whereType<String>().toList() ?? const <String>[];
+    final myHand = _readCardList(me?['hand']);
+    final myCommands = _readStringList(me?['commands']);
 
-    final handState = game?['hand_state'] as String?;
+    final handState = _readHandState(game);
     final canPlay = meSeatIdx != null && turnSeatIdx != null && meSeatIdx == turnSeatIdx;
     final canPlayCard = canPlay && handState == 'waiting_play';
 
@@ -228,14 +228,7 @@ class _TableScreenState extends State<TableScreen> {
                       return ((raw % n) + n) % n;
                     }
 
-                    final rounds = (game?['rounds'] as List?)?.whereType<List>().toList() ??
-                        const <List>[];
-                    final lastRound = rounds.isEmpty
-                        ? const <Map<String, Object?>>[]
-                        : rounds.last
-                            .whereType<Map>()
-                            .map((e) => e.cast<String, Object?>())
-                            .toList();
+                    final playedCards = _readPlayedCards(game);
 
                     return Stack(
                       children: [
@@ -262,7 +255,7 @@ class _TableScreenState extends State<TableScreen> {
                               isTurn: turnSeatIdx == seatIdx,
                             ),
                           ),
-                        for (final pc in lastRound)
+                        for (final pc in playedCards)
                           Positioned(
                             left: cardPositions[
                                     viewIdxForSeat((pc['seat_idx'] as int?) ?? 0, players.length)]
@@ -270,7 +263,9 @@ class _TableScreenState extends State<TableScreen> {
                             top: cardPositions[
                                     viewIdxForSeat((pc['seat_idx'] as int?) ?? 0, players.length)]
                                 .dy,
-                            child: _PlayedCardLabel(card: pc['card'] as String? ?? '?'),
+                            child: _PlayedCard(
+                              card: _readCardCode(pc['card']),
+                            ),
                           ),
                       ],
                     );
@@ -324,20 +319,19 @@ class _TableScreenState extends State<TableScreen> {
                     runSpacing: 8,
                     children: [
                       for (var i = 0; i < myHand.length; i++)
-                        FilledButton.tonal(
-                          onPressed: widget.ws.state == WsConnectionState.connected && canPlayCard
-                              ? () {
-                                  widget.ws.send(
-                                    WsInFrame(
-                                      msg: WsMsg.gamePlayCard(
-                                        matchId: widget.matchId,
-                                        cardIdx: i,
-                                      ),
-                                    ),
-                                  );
-                                }
-                              : null,
-                          child: Text(_compactCard(myHand[i])),
+                        _HandCard(
+                          card: myHand[i],
+                          enabled: widget.ws.state == WsConnectionState.connected && canPlayCard,
+                          onPlay: () {
+                            widget.ws.send(
+                              WsInFrame(
+                                msg: WsMsg.gamePlayCard(
+                                  matchId: widget.matchId,
+                                  cardIdx: i,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                     ],
                   ),
@@ -427,41 +421,48 @@ class _Seat extends StatelessWidget {
   }
 }
 
-class _PlayedCardLabel extends StatelessWidget {
-  const _PlayedCardLabel({required this.card});
+class _PlayedCard extends StatelessWidget {
+  const _PlayedCard({required this.card});
 
   final String card;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: scheme.outlineVariant),
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 8,
-            offset: Offset(0, 2),
-            color: Color(0x22000000),
-          ),
-        ],
-      ),
-      child: Text(
-        _compactCard(card),
-        style: const TextStyle(fontFamily: 'monospace'),
-      ),
+    return TrucoCardImage(
+      card,
+      width: 56,
+      height: 84,
+      elevation: 3,
     );
   }
 }
 
-String _compactCard(String card) {
-  final s = card.trim();
-  if (s.length <= 10) return s;
-  return '${s.substring(0, 10)}…';
+class _HandCard extends StatelessWidget {
+  const _HandCard({
+    required this.card,
+    required this.enabled,
+    required this.onPlay,
+  });
+
+  final String card;
+  final bool enabled;
+  final VoidCallback onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: enabled ? onPlay : null,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.55,
+        child: TrucoCardImage(
+          card,
+          width: 64,
+          height: 96,
+          elevation: enabled ? 4 : 1,
+        ),
+      ),
+    );
+  }
 }
 
 /// Returns top-left coordinates for each seat, where seat[0] is bottom.
@@ -548,3 +549,96 @@ List<Offset> _cardPositions(int n, Size size) {
 
   return List.filled(n, tl(center));
 }
+
+int? _readTurnSeatIdx(Map<String, Object?>? game) {
+  if (game == null) return null;
+
+  final direct = game['turn_seat_idx'];
+  if (direct is int) return direct;
+
+  final turn = game['turn'];
+  if (turn is Map) {
+    final seat = (turn as Map)['seat_idx'];
+    if (seat is int) return seat;
+  }
+
+  return null;
+}
+
+String? _readHandState(Map<String, Object?>? game) {
+  if (game == null) return null;
+  final direct = game['hand_state'];
+  if (direct is String) return direct;
+
+  final hand = game['hand'];
+  if (hand is Map) {
+    final state = (hand as Map)['state'];
+    if (state is String) return state;
+  }
+
+  return null;
+}
+
+List<String> _readStringList(Object? raw) {
+  if (raw is! List) return const <String>[];
+  return raw.whereType<String>().toList();
+}
+
+List<String> _readCardList(Object? raw) {
+  if (raw is! List) return const <String>[];
+
+  final out = <String>[];
+  for (final e in raw) {
+    final code = _readCardCode(e).trim();
+    if (code.isEmpty) continue;
+    out.add(code);
+  }
+  return out;
+}
+
+String _readCardCode(Object? raw) {
+  if (raw == null) return '';
+  if (raw is String) return raw;
+
+  if (raw is Map) {
+    final m = raw.cast<Object?, Object?>();
+
+    final code = m['code'];
+    if (code is String) return code;
+
+    final id = m['id'];
+    if (id is String) return id;
+
+    final card = m['card'];
+    if (card != null) return _readCardCode(card);
+  }
+
+  return raw.toString();
+}
+
+List<Map<String, Object?>> _readPlayedCards(Map<String, Object?>? game) {
+  if (game == null) return const <Map<String, Object?>>[];
+
+  final trick = game['trick'];
+  if (trick is List) {
+    return trick.whereType<Map>().map((e) => e.cast<String, Object?>()).toList();
+  }
+
+  final rounds = game['rounds'];
+  if (rounds is List && rounds.isNotEmpty) {
+    final last = rounds.last;
+    if (last is List) {
+      return last.whereType<Map>().map((e) => e.cast<String, Object?>()).toList();
+    }
+
+    if (last is Map) {
+      final cards = (last as Map)['cards'];
+      if (cards is List) {
+        return cards.whereType<Map>().map((e) => e.cast<String, Object?>()).toList();
+      }
+    }
+  }
+
+  return const <Map<String, Object?>>[];
+}
+
