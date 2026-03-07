@@ -40,6 +40,15 @@ int? _readSpectatorCount(Map<String, Object?> match) {
   return null;
 }
 
+const _defaultAbandonSeconds = 120;
+const _defaultReconnectSeconds = 5;
+
+int _parsePositiveSeconds(String input, int fallback) {
+  final value = int.tryParse(input.trim());
+  if (value == null || value <= 0) return fallback;
+  return value;
+}
+
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({
     super.key,
@@ -267,6 +276,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
   Future<void> _showCreateMatchDialog(BuildContext context) async {
     int maxPlayers = 2;
     var teamChoice = _TeamChoice.auto;
+    final abandonCtrl = TextEditingController(text: _defaultAbandonSeconds.toString());
+    final reconnectCtrl = TextEditingController(text: _defaultReconnectSeconds.toString());
 
     final created = await showDialog<bool>(
       context: context,
@@ -324,6 +335,33 @@ class _LobbyScreenState extends State<LobbyScreen> {
                       });
                     },
                   ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Inactivity sweeps',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: abandonCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Disconnect sweep',
+                      helperText: 'Disconnected players longer than this are removed.',
+                      suffixText: 'sec',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: reconnectCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Reconnect grace',
+                      helperText: 'Delay before sweeps run after a drop.',
+                      suffixText: 'sec',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
                 ],
               ),
               actions: [
@@ -342,7 +380,21 @@ class _LobbyScreenState extends State<LobbyScreen> {
       },
     );
 
+    final abandonText = abandonCtrl.text;
+    final reconnectText = reconnectCtrl.text;
+    abandonCtrl.dispose();
+    reconnectCtrl.dispose();
+
     if (created != true) return;
+
+    final abandonSeconds = _parsePositiveSeconds(
+      abandonText,
+      _defaultAbandonSeconds,
+    );
+    final reconnectSeconds = _parsePositiveSeconds(
+      reconnectText,
+      _defaultReconnectSeconds,
+    );
 
     final actionId = 'create-${DateTime.now().microsecondsSinceEpoch}';
     setState(() {
@@ -357,7 +409,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
           name: widget.auth.displayName,
           maxPlayers: maxPlayers,
           team: _teamFromChoice(teamChoice),
-          // Let the server use defaults for the rest.
+          abandonTimeMs: abandonSeconds * 1000,
+          reconnectGraceMs: reconnectSeconds * 1000,
         ),
       ),
     );

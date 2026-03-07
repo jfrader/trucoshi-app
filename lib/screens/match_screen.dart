@@ -8,6 +8,7 @@ import '../services/ws/v2_types.dart';
 import '../services/ws/ws_service.dart';
 import '../widgets/status_chip.dart';
 import '../widgets/team_score_chip.dart';
+import '../utils/kick_reason.dart';
 
 class MatchScreen extends StatefulWidget {
   const MatchScreen({super.key, required this.ws, required this.matchId});
@@ -28,6 +29,7 @@ class _MatchScreenState extends State<MatchScreen> {
 
   String? _lastPhase;
   bool _navigatedToTable = false;
+  bool _showingKickedDialog = false;
 
   @override
   void initState() {
@@ -113,11 +115,18 @@ class _MatchScreenState extends State<MatchScreen> {
       return;
     }
 
+    if (type == 'match.kicked') {
+      final matchId = data['match_id'] as String?;
+      if (matchId != widget.matchId) return;
+      final reason = data['reason'] as String?;
+      _showKickedDialog(reason);
+      return;
+    }
+
     if (type == 'match.left') {
       final matchId = data['match_id'] as String?;
       if (matchId != widget.matchId) return;
-      if (!mounted) return;
-      context.go('/lobby');
+      _goToLobby();
       return;
     }
 
@@ -132,6 +141,83 @@ class _MatchScreenState extends State<MatchScreen> {
       );
       return;
     }
+  }
+
+  Future<void> _showKickedDialog(String? reason) async {
+    if (_showingKickedDialog || !mounted) return;
+    _showingKickedDialog = true;
+    final description = describeKickReason(reason);
+
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Removed from match'),
+            content: Text(description),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Back to lobby'),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      _showingKickedDialog = false;
+      _goToLobby();
+    }
+  }
+
+  Future<void> _confirmKick({
+    required int seatIdx,
+    required String displayName,
+  }) async {
+    if (!mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove player'),
+        content: Text(
+          'Remove $displayName from the match? They can rejoin from the lobby afterwards.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    widget.ws.send(
+      WsInFrame(
+        msg: WsMsg.matchKick(
+          matchId: widget.matchId,
+          seatIdx: seatIdx,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Removing $displayName…')),
+    );
+  }
+
+  void _goToLobby() {
+    if (!mounted) return;
+    final router = GoRouter.maybeOf(context);
+    router?.go('/lobby');
   }
 
   @override
@@ -183,6 +269,8 @@ class _MatchScreenState extends State<MatchScreen> {
     final matchPoints = _readMatchPoints(_match);
     final turnTimeMs = _readTurnTimeMs(_match);
     final florEnabled = _readFlorEnabled(_match);
+    final abandonTimeMs = _readAbandonTimeMs(_match);
+    final reconnectGraceMs = _readReconnectGraceMs(_match);
     final teamPoints = _readTeamPoints(_match);
     final myTeamIdx = _readMyTeamIdx(players, meSeatIdx);
     final winnerTeamIdx = _readWinnerTeamIdx(_match, _game);
@@ -262,6 +350,22 @@ class _MatchScreenState extends State<MatchScreen> {
         StatusChip(
           icon: Icons.timer,
           label: 'Turn timer: ${_formatTurnTime(turnTimeMs)}',
+        ),
+      );
+    }
+    if (abandonTimeMs != null) {
+      optionChips.add(
+        StatusChip(
+          icon: Icons.portable_wifi_off,
+          label: 'Disconnect sweep: ${_formatDuration(abandonTimeMs)}',
+        ),
+      );
+    }
+    if (reconnectGraceMs != null) {
+      optionChips.add(
+        StatusChip(
+          icon: Icons.restart_alt,
+          label: 'Reconnect grace: ${_formatDuration(reconnectGraceMs)}',
         ),
       );
     }
@@ -378,6 +482,15 @@ class _MatchScreenState extends State<MatchScreen> {
                         ready: players[i]['ready'] == true,
                         isMe: meSeatIdx == i,
                         isOwner: ownerSeatIdx == i,
+                        onKick: (iAmOwner &&
+                                meSeatIdx != null &&
+                                i != meSeatIdx &&
+                                widget.ws.state == WsConnectionState.connected)
+                            ? () => _confirmKick(
+                                  seatIdx: i,
+                                  displayName: (players[i]['name'] as String?) ?? 'player',
+                                )
+                            : null,
                       ),
                     ],
                   ],
@@ -559,6 +672,7 @@ class _PlayerRow extends StatelessWidget {
     required this.ready,
     required this.isMe,
     required this.isOwner,
+    this.onKick,
   });
 
   final int seatIdx;
@@ -567,6 +681,7 @@ class _PlayerRow extends StatelessWidget {
   final bool ready;
   final bool isMe;
   final bool isOwner;
+  final VoidCallback? onKick;
 
   @override
   Widget build(BuildContext context) {
@@ -618,6 +733,17 @@ class _PlayerRow extends StatelessWidget {
                   runSpacing: 8,
                   children: chips,
                 ),
+                if (onKick != null) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: onKick,
+                      icon: const Icon(Icons.person_remove),
+                      label: const Text('Remove player'),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -734,6 +860,36 @@ int? _readMatchPoints(Map<String, Object?>? match) {
   return null;
 }
 
+int? _readAbandonTimeMs(Map<String, Object?>? match) {
+  if (match == null) return null;
+  final raw = match['abandon_time_ms'];
+  if (raw is int) return raw;
+  if (raw is num) return raw.toInt();
+
+  final opts = match['options'];
+  if (opts is Map) {
+    final v = opts['abandon_time_ms'];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+  }
+  return null;
+}
+
+int? _readReconnectGraceMs(Map<String, Object?>? match) {
+  if (match == null) return null;
+  final raw = match['reconnect_grace_ms'];
+  if (raw is int) return raw;
+  if (raw is num) return raw.toInt();
+
+  final opts = match['options'];
+  if (opts is Map) {
+    final v = opts['reconnect_grace_ms'];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+  }
+  return null;
+}
+
 int? _readTurnTimeMs(Map<String, Object?>? match) {
   if (match == null) return null;
   final raw = match['turn_time_ms'];
@@ -763,6 +919,10 @@ bool? _readFlorEnabled(Map<String, Object?>? match) {
 }
 
 String _formatTurnTime(int ms) {
+  return _formatDuration(ms);
+}
+
+String _formatDuration(int ms) {
   if (ms <= 0) return 'instant';
   final seconds = (ms / 1000).round();
   final minutes = seconds ~/ 60;

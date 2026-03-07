@@ -9,6 +9,7 @@ import '../services/ws/ws_service.dart';
 import '../widgets/status_chip.dart';
 import '../widgets/team_score_chip.dart';
 import '../widgets/truco_card.dart';
+import '../utils/kick_reason.dart';
 
 /// Live table screen backed by WS v2 `match.*` + `game.*`.
 ///
@@ -32,6 +33,7 @@ class _TableScreenState extends State<TableScreen> {
   Map<String, Object?>? _game;
 
   String? _lastError;
+  bool _showingKickedDialog = false;
 
   String? _selectedCommand;
 
@@ -117,13 +119,52 @@ class _TableScreenState extends State<TableScreen> {
       return;
     }
 
+    if (type == 'match.kicked') {
+      final matchId = data['match_id'] as String?;
+      if (matchId != null && matchId != widget.matchId) return;
+      final reason = data['reason'] as String?;
+      _showKickedDialog(reason);
+      return;
+    }
+
     if (type == 'match.left') {
       final matchId = data['match_id'] as String?;
       if (matchId != null && matchId != widget.matchId) return;
-      if (!mounted) return;
-      context.go('/lobby');
+      _goToLobby();
       return;
     }
+  }
+
+  Future<void> _showKickedDialog(String? reason) async {
+    if (_showingKickedDialog || !mounted) return;
+    _showingKickedDialog = true;
+    final description = describeKickReason(reason);
+
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Removed from match'),
+          content: Text(description),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Back to lobby'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      _showingKickedDialog = false;
+      _goToLobby();
+    }
+  }
+
+  void _goToLobby() {
+    if (!mounted) return;
+    final router = GoRouter.maybeOf(context);
+    router?.go('/lobby');
   }
 
   @override

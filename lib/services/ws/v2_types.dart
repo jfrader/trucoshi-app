@@ -157,6 +157,8 @@ class WsMsg {
     int? matchPoints,
     bool? flor,
     int? turnTimeMs,
+    int? abandonTimeMs,
+    int? reconnectGraceMs,
     int? team,
   }) {
     // IMPORTANT: if we send `options`, it must be a complete `MatchOptions` object
@@ -165,13 +167,17 @@ class WsMsg {
         maxPlayers != null ||
         matchPoints != null ||
         flor != null ||
-        turnTimeMs != null;
+        turnTimeMs != null ||
+        abandonTimeMs != null ||
+        reconnectGraceMs != null;
 
     final options = <String, Object?>{
       if (shouldSendOptions) 'max_players': maxPlayers ?? 6,
       if (shouldSendOptions) 'flor': flor ?? true,
       if (shouldSendOptions) 'match_points': matchPoints ?? 9,
       if (shouldSendOptions) 'turn_time_ms': turnTimeMs ?? 30000,
+      if (shouldSendOptions) 'abandon_time_ms': abandonTimeMs ?? 120000,
+      if (shouldSendOptions) 'reconnect_grace_ms': reconnectGraceMs ?? 5000,
     };
 
     return WsMsg(
@@ -180,6 +186,19 @@ class WsMsg {
         'name': name,
         ...?(shouldSendOptions ? {'options': options} : null),
         ...?(team == null ? null : {'team': team}),
+      },
+    );
+  }
+
+  static WsMsg matchKick({
+    required String matchId,
+    required int seatIdx,
+  }) {
+    return WsMsg(
+      type: 'match.kick',
+      data: {
+        'match_id': matchId,
+        'seat_idx': seatIdx,
       },
     );
   }

@@ -70,6 +70,15 @@ class _FakeWebSocketChannel
     _server.add(jsonEncode(frame));
   }
 
+  List<Map<String, Object?>> sentFramesJson() {
+    final out = <Map<String, Object?>>[];
+    for (final e in _sink.added) {
+      if (e is! String) continue;
+      out.add((jsonDecode(e) as Map).cast<String, Object?>());
+    }
+    return out;
+  }
+
   Future<void> dispose() async {
     await _server.close();
     await _clientController.close();
@@ -116,12 +125,16 @@ void main() {
             'max_players': 2,
             'match_points': 9,
             'turn_time_ms': 30000,
+            'abandon_time_ms': 120000,
+            'reconnect_grace_ms': 5000,
             'flor': true,
             'team_points': [3, 5],
             'options': {
               'max_players': 2,
               'match_points': 9,
               'turn_time_ms': 30000,
+              'abandon_time_ms': 120000,
+              'reconnect_grace_ms': 5000,
               'flor': true,
             },
           },
@@ -140,8 +153,184 @@ void main() {
     expect(find.textContaining('Seat 0 • Team 0'), findsOneWidget);
     expect(find.textContaining('Seat 1 • Team 1'), findsOneWidget);
 
+    await tester.scrollUntilVisible(
+      find.textContaining('Disconnect sweep'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.textContaining('Disconnect sweep'), findsOneWidget);
+    expect(find.textContaining('Reconnect grace'), findsOneWidget);
+
     await chan.dispose();
     ws.dispose();
     auth.dispose();
   });
+
+  testWidgets('Owner can kick another player', (tester) async {
+    final auth = AuthService();
+    auth.continueAsGuest(displayName: 'Fran');
+
+    final chan = _FakeWebSocketChannel();
+    final caps = const PlatformCaps(supportsWsAuthHeaders: true);
+
+    final ws = WsService(
+      auth: auth,
+      caps: caps,
+      channelFactory: (uri, {headers}) => chan,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blue),
+        home: MatchScreen(ws: ws, matchId: 'm1'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    chan.serverAddJson({
+      'v': 2,
+      'msg': {
+        'type': 'match.snapshot',
+        'data': {
+          'match': {
+            'id': 'm1',
+            'name': 'Friday Match',
+            'phase': 'lobby',
+            'owner_seat_idx': 0,
+            'players': [
+              {'name': 'Fran', 'team': 0, 'ready': true},
+              {'name': 'Alex', 'team': 1, 'ready': false},
+            ],
+            'max_players': 2,
+            'match_points': 9,
+            'turn_time_ms': 30000,
+            'abandon_time_ms': 120000,
+            'reconnect_grace_ms': 5000,
+            'flor': true,
+            'team_points': [3, 5],
+            'options': {
+              'max_players': 2,
+              'match_points': 9,
+              'turn_time_ms': 30000,
+              'abandon_time_ms': 120000,
+              'reconnect_grace_ms': 5000,
+              'flor': true,
+            },
+          },
+          'me': {'seat_idx': 0},
+        },
+      },
+    });
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Remove player'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Remove player'));
+
+    await tester.tap(
+      find.text('Remove player'),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.tap(find.text('Remove').last);
+    await tester.pumpAndSettle();
+
+    final sent = chan.sentFramesJson();
+    final kickFrames = sent.where((frame) {
+      final msg = frame['msg'];
+      if (msg is! Map) return false;
+      return msg['type'] == 'match.kick';
+    }).toList();
+
+    expect(kickFrames, isNotEmpty);
+    final last = (kickFrames.last['msg'] as Map).cast<String, Object?>();
+    final data = (last['data'] as Map).cast<String, Object?>();
+    expect(data['seat_idx'], 1);
+
+    await chan.dispose();
+    ws.dispose();
+    auth.dispose();
+  });
+
+  testWidgets('Match screen shows removal reasons when kicked', (tester) async {
+    final auth = AuthService();
+    auth.continueAsGuest(displayName: 'Fran');
+
+    final chan = _FakeWebSocketChannel();
+    final caps = const PlatformCaps(supportsWsAuthHeaders: true);
+
+    final ws = WsService(
+      auth: auth,
+      caps: caps,
+      channelFactory: (uri, {headers}) => chan,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.green),
+        home: MatchScreen(ws: ws, matchId: 'm1'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    chan.serverAddJson({
+      'v': 2,
+      'msg': {
+        'type': 'match.snapshot',
+        'data': {
+          'match': {
+            'id': 'm1',
+            'name': 'Friday Match',
+            'phase': 'lobby',
+            'owner_seat_idx': 0,
+            'players': [
+              {'name': 'Fran', 'team': 0, 'ready': true},
+            ],
+            'max_players': 2,
+            'match_points': 9,
+            'turn_time_ms': 30000,
+            'flor': true,
+            'team_points': [0, 0],
+            'options': {
+              'max_players': 2,
+              'match_points': 9,
+              'turn_time_ms': 30000,
+              'flor': true,
+            },
+          },
+          'me': {'seat_idx': 0},
+        },
+      },
+    });
+    await tester.pumpAndSettle();
+
+    chan.serverAddJson({
+      'v': 2,
+      'msg': {
+        'type': 'match.kicked',
+        'data': {
+          'match_id': 'm1',
+          'reason': 'owner_kick',
+        },
+      },
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('Removed from match'), findsOneWidget);
+    expect(find.text('Removed by the match owner.'), findsOneWidget);
+
+    await tester.tap(find.text('Back to lobby'));
+    await tester.pumpAndSettle();
+
+    await chan.dispose();
+    ws.dispose();
+    auth.dispose();
+  });
+
 }
