@@ -175,10 +175,11 @@ class _LobbyScreenState extends State<LobbyScreen> {
           builder: (context, setLocalState) {
             return AlertDialog(
               title: const Text('Join match'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                   Text('Joining as: ${widget.auth.displayName}'),
                   const SizedBox(height: 12),
                   const Text('Team (optional):'),
@@ -206,6 +207,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                     },
                   ),
                 ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -286,10 +288,11 @@ class _LobbyScreenState extends State<LobbyScreen> {
           builder: (context, setLocalState) {
             return AlertDialog(
               title: const Text('Create match'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                   Text('You will create as: ${widget.auth.displayName}'),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<int>(
@@ -363,6 +366,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                     keyboardType: TextInputType.number,
                   ),
                 ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -382,8 +386,6 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
     final abandonText = abandonCtrl.text;
     final reconnectText = reconnectCtrl.text;
-    abandonCtrl.dispose();
-    reconnectCtrl.dispose();
 
     if (created != true) return;
 

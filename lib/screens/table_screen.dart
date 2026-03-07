@@ -161,6 +161,46 @@ class _TableScreenState extends State<TableScreen> {
     }
   }
 
+  Future<void> _confirmKick({
+    required int seatIdx,
+    required String displayName,
+  }) async {
+    if (!mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove player'),
+        content: Text(
+          'Remove $displayName from the match? They can rejoin from the lobby afterwards.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    widget.ws.send(
+      WsInFrame(
+        msg: WsMsg.matchKick(matchId: widget.matchId, seatIdx: seatIdx),
+      ),
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Removing $displayName…')));
+  }
+
   void _goToLobby() {
     if (!mounted) return;
     final router = GoRouter.maybeOf(context);
@@ -210,10 +250,14 @@ class _TableScreenState extends State<TableScreen> {
     final statusText = isSpectating
         ? 'Spectating: live view only.'
         : canPlayCard
-            ? 'Your turn.'
-            : canPlay
-                ? 'Waiting: ${handState ?? '?'}'
-                : 'Waiting for other players…';
+        ? 'Your turn.'
+        : canPlay
+        ? 'Waiting: ${handState ?? '?'}'
+        : 'Waiting for other players…';
+    final ownerSeatIdx = _readOwnerSeatIdx(match);
+    final bool iAmOwner =
+        meSeatIdx != null && ownerSeatIdx != null && meSeatIdx == ownerSeatIdx;
+    final wsConnected = widget.ws.state == WsConnectionState.connected;
 
     return Scaffold(
       appBar: AppBar(
@@ -362,29 +406,41 @@ class _TableScreenState extends State<TableScreen> {
                           seatIdx < players.length;
                           seatIdx++
                         )
-                          Positioned(
-                            left:
-                                seatPositions[viewIdxForSeat(
-                                      seatIdx,
-                                      players.length,
-                                    )]
-                                    .dx,
-                            top:
-                                seatPositions[viewIdxForSeat(
-                                      seatIdx,
-                                      players.length,
-                                    )]
-                                    .dy,
-                            child: _Seat(
-                              name:
-                                  players[seatIdx]['name'] as String? ??
-                                  'player',
-                              team: players[seatIdx]['team']?.toString() ?? '?',
-                              ready: players[seatIdx]['ready'] == true,
-                              isMe: meSeatIdx == seatIdx,
-                              isTurn: turnSeatIdx == seatIdx,
-                            ),
-                          ),
+                          (() {
+                            final viewIdx = viewIdxForSeat(
+                              seatIdx,
+                              players.length,
+                            );
+                            final seatPos = seatPositions[viewIdx];
+                            final seatName =
+                                (players[seatIdx]['name'] as String?) ??
+                                'player';
+                            final isSeatOwner = ownerSeatIdx == seatIdx;
+                            final canKickSeat =
+                                wsConnected && iAmOwner && seatIdx != meSeatIdx;
+                            final onRemove = canKickSeat
+                                ? () => _confirmKick(
+                                    seatIdx: seatIdx,
+                                    displayName: seatName,
+                                  )
+                                : null;
+
+                            return Positioned(
+                              left: seatPos.dx,
+                              top: seatPos.dy,
+                              child: _Seat(
+                                seatIdx: seatIdx,
+                                name: seatName,
+                                team:
+                                    players[seatIdx]['team']?.toString() ?? '?',
+                                ready: players[seatIdx]['ready'] == true,
+                                isMe: meSeatIdx == seatIdx,
+                                isTurn: turnSeatIdx == seatIdx,
+                                isOwner: isSeatOwner,
+                                onRemove: onRemove,
+                              ),
+                            );
+                          })(),
                         for (final pc in playedCards)
                           Positioned(
                             left:
@@ -518,18 +574,24 @@ class _TableScreenState extends State<TableScreen> {
 
 class _Seat extends StatelessWidget {
   const _Seat({
+    required this.seatIdx,
     required this.name,
     required this.team,
     required this.ready,
     required this.isMe,
     required this.isTurn,
+    required this.isOwner,
+    this.onRemove,
   });
 
+  final int seatIdx;
   final String name;
   final String team;
   final bool ready;
   final bool isMe;
   final bool isTurn;
+  final bool isOwner;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -539,6 +601,9 @@ class _Seat extends StatelessWidget {
     final bg = isMe ? scheme.secondaryContainer : baseColor.withOpacity(0.18);
 
     final border = isTurn ? Border.all(color: scheme.primary, width: 2) : null;
+
+    final trimmed = name.trim();
+    final displayName = trimmed.isEmpty ? 'Seat $seatIdx' : trimmed;
 
     return Container(
       width: 112,
@@ -552,36 +617,85 @@ class _Seat extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
                 radius: 16,
                 backgroundColor: isMe ? scheme.primary : scheme.secondary,
                 foregroundColor: scheme.onPrimary,
                 child: Text(
-                  name.isEmpty ? '?' : name.substring(0, 1).toUpperCase(),
+                  displayName.isEmpty
+                      ? '?'
+                      : displayName.substring(0, 1).toUpperCase(),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontWeight: isMe ? FontWeight.bold : FontWeight.w600,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: isMe
+                                  ? FontWeight.bold
+                                  : FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (isOwner)
+                          Icon(Icons.star, size: 16, color: scheme.secondary),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 2,
+                      children: [
+                        Text(
+                          'team $team',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          ready ? 'ready' : '…',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: ready
+                                ? scheme.onSurface
+                                : scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('team $team', style: const TextStyle(fontSize: 12)),
-              Text(ready ? 'ready' : '…', style: const TextStyle(fontSize: 12)),
-            ],
-          ),
+          if (onRemove != null) ...[
+            const SizedBox(height: 6),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                key: ValueKey('seat-$seatIdx-remove'),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 4,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: onRemove,
+                icon: const Icon(Icons.person_remove, size: 16),
+                label: const Text('Remove', style: TextStyle(fontSize: 12)),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -858,6 +972,14 @@ String _readCardCode(Object? raw) {
   return raw.toString();
 }
 
+int? _readOwnerSeatIdx(Map<String, Object?>? match) {
+  if (match == null) return null;
+  final raw = match['owner_seat_idx'];
+  if (raw is int) return raw;
+  if (raw is num) return raw.toInt();
+  return null;
+}
+
 int? _readSpectatorCount(Map<String, Object?>? match) {
   if (match == null) return null;
   final raw = match['spectator_count'];
@@ -865,4 +987,3 @@ int? _readSpectatorCount(Map<String, Object?>? match) {
   if (raw is num) return raw.toInt();
   return null;
 }
-

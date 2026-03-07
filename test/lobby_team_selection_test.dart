@@ -245,4 +245,62 @@ void main() {
       auth.dispose();
     },
   );
+
+  testWidgets('Create match dialog sends custom inactivity timers', (
+    tester,
+  ) async {
+    final auth = AuthService();
+    auth.continueAsGuest(displayName: 'Fran');
+
+    final chan = _FakeWebSocketChannel();
+    final caps = const PlatformCaps(supportsWsAuthHeaders: true);
+
+    final ws = WsService(
+      auth: auth,
+      caps: caps,
+      channelFactory: (uri, {headers}) => chan,
+    );
+
+    await tester.runAsync(() async {
+      await ws.connect();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.red),
+        home: LobbyScreen(auth: auth, ws: ws, caps: caps),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Create match'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.bySemanticsLabel('Disconnect sweep'), '90');
+    await tester.enterText(find.bySemanticsLabel('Reconnect grace'), '12');
+
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    final sent = chan.sentFramesJson();
+    final createFrames = sent.where((f) {
+      final msg = f['msg'];
+      if (msg is! Map) return false;
+      return msg['type'] == 'match.create';
+    }).toList();
+
+    expect(createFrames, isNotEmpty);
+
+    final last = createFrames.last;
+    final msg = (last['msg'] as Map).cast<String, Object?>();
+    final data = (msg['data'] as Map).cast<String, Object?>();
+
+    final opts = (data['options'] as Map).cast<String, Object?>();
+    expect(opts['abandon_time_ms'], 90000);
+    expect(opts['reconnect_grace_ms'], 12000);
+
+    await chan.dispose();
+    ws.dispose();
+    auth.dispose();
+  });
 }
