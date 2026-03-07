@@ -239,6 +239,7 @@ void main() {
 
       final opts = (data['options'] as Map).cast<String, Object?>();
       expect(opts['max_players'], 4);
+      expect(opts['falta_envido'], 2);
 
       await chan.dispose();
       ws.dispose();
@@ -298,6 +299,7 @@ void main() {
     final opts = (data['options'] as Map).cast<String, Object?>();
     expect(opts['abandon_time_ms'], 90000);
     expect(opts['reconnect_grace_ms'], 12000);
+    expect(opts['falta_envido'], 2);
 
     await chan.dispose();
     ws.dispose();

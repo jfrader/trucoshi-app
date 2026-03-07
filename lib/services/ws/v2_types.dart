@@ -230,6 +230,36 @@ class WsMsg {
   static WsMsg matchLeave({required String matchId}) =>
       WsMsg(type: 'match.leave', data: {'match_id': matchId});
 
+  static WsMsg matchOptionsSet({
+    required String matchId,
+    required int maxPlayers,
+    required int matchPoints,
+    required bool flor,
+    required int turnTimeMs,
+    required int abandonTimeMs,
+    required int reconnectGraceMs,
+    required int faltaEnvido,
+  }) {
+    return WsMsg(
+      type: 'match.options.set',
+      data: {
+        'match_id': matchId,
+        'options': {
+          'max_players': maxPlayers,
+          'match_points': matchPoints,
+          'flor': flor,
+          'turn_time_ms': turnTimeMs,
+          'abandon_time_ms': abandonTimeMs,
+          'reconnect_grace_ms': reconnectGraceMs,
+          'falta_envido': faltaEnvido,
+        },
+      },
+    );
+  }
+
+  static WsMsg matchRematch({required String matchId}) =>
+      WsMsg(type: 'match.rematch', data: {'match_id': matchId});
+
   static WsMsg matchPause({required String matchId}) =>
       WsMsg(type: 'match.pause', data: {'match_id': matchId});
 

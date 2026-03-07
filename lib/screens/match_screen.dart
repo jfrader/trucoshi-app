@@ -30,6 +30,8 @@ class _MatchScreenState extends State<MatchScreen> {
   String? _lastPhase;
   bool _navigatedToTable = false;
   bool _showingKickedDialog = false;
+  String? _pendingOptionsActionId;
+  String? _pendingRematchActionId;
 
   @override
   void initState() {
@@ -69,7 +71,19 @@ class _MatchScreenState extends State<MatchScreen> {
       if (m == null) return;
 
       final matchId = m['id'] as String?;
-      if (matchId != null && matchId != widget.matchId) return;
+      final isRematchResponse =
+          _pendingRematchActionId != null && frame.id == _pendingRematchActionId;
+      if (matchId != null && matchId != widget.matchId) {
+        if (isRematchResponse) {
+          final newMatchId = matchId;
+          setState(() {
+            _pendingRematchActionId = null;
+          });
+          if (!mounted) return;
+          context.go('/match/$newMatchId');
+        }
+        return;
+      }
 
       final me = (data['me'] as Map?)?.cast<String, Object?>();
       final phase = m['phase'] as String?;
@@ -80,6 +94,23 @@ class _MatchScreenState extends State<MatchScreen> {
         if (me != null) _me = me;
         _lastPhase = phase ?? _lastPhase;
       });
+
+      if (_pendingOptionsActionId != null && frame.id == _pendingOptionsActionId) {
+        setState(() {
+          _pendingOptionsActionId = null;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Match options updated')),
+          );
+        }
+      }
+
+      if (_pendingRematchActionId != null && frame.id == _pendingRematchActionId) {
+        setState(() {
+          _pendingRematchActionId = null;
+        });
+      }
 
       // When match starts, proactively fetch gameplay snapshot and move to table.
       if (phase == 'started' && _game == null) {
@@ -133,6 +164,20 @@ class _MatchScreenState extends State<MatchScreen> {
     if (type == 'error') {
       final code = data['code'] as String?;
       final msg = data['message'] as String?;
+      final isOptionsError =
+          _pendingOptionsActionId != null && frame.id == _pendingOptionsActionId;
+      final isRematchError =
+          _pendingRematchActionId != null && frame.id == _pendingRematchActionId;
+      if (isOptionsError) {
+        setState(() {
+          _pendingOptionsActionId = null;
+        });
+      }
+      if (isRematchError) {
+        setState(() {
+          _pendingRematchActionId = null;
+        });
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -214,6 +259,251 @@ class _MatchScreenState extends State<MatchScreen> {
     );
   }
 
+  Future<void> _showEditOptionsDialog() async {
+    final match = _match;
+    if (match == null || _pendingOptionsActionId != null) return;
+
+    int maxPlayers = _readMaxPlayers(match) ?? 4;
+    int matchPoints = _readMatchPoints(match) ?? 9;
+    bool florEnabled = _readFlorEnabled(match) ?? true;
+    int faltaEnvido = _readFaltaEnvidoMode(match) ?? 2;
+    int turnSeconds = (((_readTurnTimeMs(match) ?? 30000) / 1000).round())
+        .clamp(1, 600)
+        .toInt();
+    int abandonSeconds = (((_readAbandonTimeMs(match) ?? 120000) / 1000).round())
+        .clamp(1, 600)
+        .toInt();
+    int reconnectSeconds = (((_readReconnectGraceMs(match) ?? 5000) / 1000).round())
+        .clamp(1, 60)
+        .toInt();
+
+    final matchPointsCtrl = TextEditingController(text: matchPoints.toString());
+    final turnCtrl = TextEditingController(text: turnSeconds.toString());
+    final abandonCtrl = TextEditingController(text: abandonSeconds.toString());
+    final reconnectCtrl = TextEditingController(text: reconnectSeconds.toString());
+
+    try {
+      final saved = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return StatefulBuilder(
+            builder: (context, setLocalState) {
+              return AlertDialog(
+                title: const Text('Edit match options'),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      DropdownButtonFormField<int>(
+                        value: maxPlayers,
+                        decoration: const InputDecoration(
+                          labelText: 'Max players',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 2, child: Text('2 (1v1)')),
+                          DropdownMenuItem(value: 4, child: Text('4 (2v2)')),
+                          DropdownMenuItem(value: 6, child: Text('6 (3v3)')),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setLocalState(() {
+                            maxPlayers = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: matchPointsCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Points to win',
+                          helperText: '1-15',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 12),
+                      SwitchListTile(
+                        value: florEnabled,
+                        onChanged: (v) {
+                          setLocalState(() {
+                            florEnabled = v;
+                          });
+                        },
+                        title: const Text('Flor enabled'),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int>(
+                        value: faltaEnvido,
+                        decoration: const InputDecoration(
+                          labelText: 'Falta Envido scoring',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 1,
+                            child: Text('Two faltas (2× points)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 2,
+                            child: Text('One falta (match points)'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setLocalState(() {
+                            faltaEnvido = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: turnCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Turn timer',
+                          helperText: 'Seconds (1-600)',
+                          suffixText: 'sec',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: abandonCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Disconnect sweep',
+                          helperText: 'Seconds before AFK removal (1-600)',
+                          suffixText: 'sec',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: reconnectCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Reconnect grace',
+                          helperText: 'Seconds before sweeps run (1-60)',
+                          suffixText: 'sec',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text('Save'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      if (saved == true) {
+        final parsedMatchPoints = _parseBoundedInt(
+          matchPointsCtrl.text,
+          fallback: matchPoints,
+          min: 1,
+          max: 15,
+        );
+        final parsedTurnSeconds = _parseBoundedInt(
+          turnCtrl.text,
+          fallback: turnSeconds,
+          min: 1,
+          max: 600,
+        );
+        final parsedAbandonSeconds = _parseBoundedInt(
+          abandonCtrl.text,
+          fallback: abandonSeconds,
+          min: 1,
+          max: 600,
+        );
+        final parsedReconnectSeconds = _parseBoundedInt(
+          reconnectCtrl.text,
+          fallback: reconnectSeconds,
+          min: 1,
+          max: 60,
+        );
+
+        _submitMatchOptions(
+          maxPlayers: maxPlayers,
+          matchPoints: parsedMatchPoints,
+          flor: florEnabled,
+          faltaEnvido: faltaEnvido,
+          turnTimeMs: parsedTurnSeconds * 1000,
+          abandonTimeMs: parsedAbandonSeconds * 1000,
+          reconnectGraceMs: parsedReconnectSeconds * 1000,
+        );
+      }
+    } finally {
+      matchPointsCtrl.dispose();
+      turnCtrl.dispose();
+      abandonCtrl.dispose();
+      reconnectCtrl.dispose();
+    }
+  }
+
+  void _submitMatchOptions({
+    required int maxPlayers,
+    required int matchPoints,
+    required bool flor,
+    required int faltaEnvido,
+    required int turnTimeMs,
+    required int abandonTimeMs,
+    required int reconnectGraceMs,
+  }) {
+    if (!mounted) return;
+    final actionId = 'options-' + DateTime.now().microsecondsSinceEpoch.toString();
+    setState(() {
+      _pendingOptionsActionId = actionId;
+    });
+    widget.ws.send(
+      WsInFrame(
+        id: actionId,
+        msg: WsMsg.matchOptionsSet(
+          matchId: widget.matchId,
+          maxPlayers: maxPlayers,
+          matchPoints: matchPoints,
+          flor: flor,
+          turnTimeMs: turnTimeMs,
+          abandonTimeMs: abandonTimeMs,
+          reconnectGraceMs: reconnectGraceMs,
+          faltaEnvido: faltaEnvido,
+        ),
+      ),
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Updating match options…')),
+    );
+  }
+
+  void _requestRematch() {
+    if (!mounted || _pendingRematchActionId != null) return;
+    final actionId = 'rematch-' + DateTime.now().microsecondsSinceEpoch.toString();
+    setState(() {
+      _pendingRematchActionId = actionId;
+    });
+    widget.ws.send(
+      WsInFrame(
+        id: actionId,
+        msg: WsMsg.matchRematch(matchId: widget.matchId),
+      ),
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Creating rematch…')),
+    );
+  }
+
   void _goToLobby() {
     if (!mounted) return;
     final router = GoRouter.maybeOf(context);
@@ -267,6 +557,7 @@ class _MatchScreenState extends State<MatchScreen> {
     final matchName = (_match?['name'] as String?) ?? widget.matchId;
     final maxPlayers = _readMaxPlayers(_match);
     final matchPoints = _readMatchPoints(_match);
+    final faltaEnvidoMode = _readFaltaEnvidoMode(_match);
     final turnTimeMs = _readTurnTimeMs(_match);
     final florEnabled = _readFlorEnabled(_match);
     final abandonTimeMs = _readAbandonTimeMs(_match);
@@ -274,6 +565,13 @@ class _MatchScreenState extends State<MatchScreen> {
     final teamPoints = _readTeamPoints(_match);
     final myTeamIdx = _readMyTeamIdx(players, meSeatIdx);
     final winnerTeamIdx = _readWinnerTeamIdx(_match, _game);
+
+    final canEditOptions = iAmOwner && phase == 'lobby';
+    final optionsSaving = _pendingOptionsActionId != null;
+    final canSubmitOptionChanges =
+        canEditOptions && widget.ws.state == WsConnectionState.connected && !optionsSaving;
+    final canRematch = phase == 'finished' && iAmOwner;
+    final rematchPending = _pendingRematchActionId != null;
 
     final metaChips = <Widget>[];
     if (phase != null) {
@@ -334,6 +632,16 @@ class _MatchScreenState extends State<MatchScreen> {
     if (matchPoints != null) {
       optionChips.add(
         StatusChip(icon: Icons.flag, label: 'Points to win: $matchPoints'),
+      );
+    }
+    if (faltaEnvidoMode != null) {
+      optionChips.add(
+        StatusChip(
+          icon: Icons.change_circle,
+          label: faltaEnvidoMode == 1
+              ? 'Falta Envido: 2× match points'
+              : 'Falta Envido: match points',
+        ),
       );
     }
     if (florEnabled != null) {
@@ -519,6 +827,25 @@ class _MatchScreenState extends State<MatchScreen> {
                     runSpacing: 8,
                     children: optionChips,
                   ),
+                  if (canEditOptions) ...[
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton.icon(
+                        onPressed: canSubmitOptionChanges
+                            ? () => _showEditOptionsDialog()
+                            : null,
+                        icon: optionsSaving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.tune),
+                        label: Text(optionsSaving ? 'Saving…' : 'Edit options'),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -575,6 +902,25 @@ class _MatchScreenState extends State<MatchScreen> {
         label: const Text('Leave match'),
       ),
     ];
+
+    if (canRematch) {
+      actionButtons.insert(
+        0,
+        FilledButton.icon(
+          onPressed: rematchPending || widget.ws.state != WsConnectionState.connected
+              ? null
+              : _requestRematch,
+          icon: rematchPending
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.replay),
+          label: Text(rematchPending ? 'Rematching…' : 'Rematch'),
+        ),
+      );
+    }
 
     if (myReady != null) {
       actionButtons.insert(
@@ -918,6 +1264,21 @@ bool? _readFlorEnabled(Map<String, Object?>? match) {
   return null;
 }
 
+int? _readFaltaEnvidoMode(Map<String, Object?>? match) {
+  if (match == null) return null;
+  final raw = match['falta_envido'];
+  if (raw is int) return raw;
+  if (raw is num) return raw.toInt();
+
+  final opts = match['options'];
+  if (opts is Map) {
+    final v = opts['falta_envido'];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+  }
+  return null;
+}
+
 String _formatTurnTime(int ms) {
   return _formatDuration(ms);
 }
@@ -941,4 +1302,18 @@ String _teamLabel(Object? raw) {
   if (raw is num) return raw.toInt().toString();
   if (raw is String && raw.isNotEmpty) return raw;
   return '?';
+}
+
+int _parseBoundedInt(String input, {required int fallback, int? min, int? max}) {
+  final trimmed = input.trim();
+  final value = int.tryParse(trimmed);
+  if (value == null) return fallback;
+  var result = value;
+  if (min != null && result < min) {
+    result = min;
+  }
+  if (max != null && result > max) {
+    result = max;
+  }
+  return result;
 }
