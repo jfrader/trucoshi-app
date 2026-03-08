@@ -148,6 +148,8 @@ class WsMsg {
 
   static WsMsg lobbySnapshotGet() => WsMsg(type: 'lobby.snapshot.get');
 
+  static WsMsg meActiveMatchesGet() => WsMsg(type: 'me.active_matches.get');
+
   static WsMsg matchSnapshotGet({required String matchId}) =>
       WsMsg(type: 'match.snapshot.get', data: {'match_id': matchId});
 
@@ -155,6 +157,7 @@ class WsMsg {
     required String name,
     int? maxPlayers,
     int? matchPoints,
+    int? faltaEnvido,
     bool? flor,
     int? turnTimeMs,
     int? abandonTimeMs,
@@ -166,6 +169,7 @@ class WsMsg {
     final shouldSendOptions =
         maxPlayers != null ||
         matchPoints != null ||
+        faltaEnvido != null ||
         flor != null ||
         turnTimeMs != null ||
         abandonTimeMs != null ||
@@ -175,6 +179,7 @@ class WsMsg {
       if (shouldSendOptions) 'max_players': maxPlayers ?? 6,
       if (shouldSendOptions) 'flor': flor ?? true,
       if (shouldSendOptions) 'match_points': matchPoints ?? 9,
+      if (shouldSendOptions) 'falta_envido': faltaEnvido ?? 2,
       if (shouldSendOptions) 'turn_time_ms': turnTimeMs ?? 30000,
       if (shouldSendOptions) 'abandon_time_ms': abandonTimeMs ?? 120000,
       if (shouldSendOptions) 'reconnect_grace_ms': reconnectGraceMs ?? 5000,
@@ -190,16 +195,10 @@ class WsMsg {
     );
   }
 
-  static WsMsg matchKick({
-    required String matchId,
-    required int seatIdx,
-  }) {
+  static WsMsg matchKick({required String matchId, required int seatIdx}) {
     return WsMsg(
       type: 'match.kick',
-      data: {
-        'match_id': matchId,
-        'seat_idx': seatIdx,
-      },
+      data: {'match_id': matchId, 'seat_idx': seatIdx},
     );
   }
 

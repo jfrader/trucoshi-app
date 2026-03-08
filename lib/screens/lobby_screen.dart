@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 
+import '../config/app_config.dart';
 import '../platform/platform_caps.dart';
 import '../services/auth_service.dart';
 import '../services/ws/v2_types.dart';
@@ -40,6 +43,62 @@ int? _readSpectatorCount(Map<String, Object?> match) {
   return null;
 }
 
+List<Map<String, Object?>> _extractActiveMatches(Object? raw) {
+  if (raw is! List) return const [];
+
+  final out = <Map<String, Object?>>[];
+  for (final entry in raw) {
+    final summary = _extractActiveMatch(entry);
+    if (summary != null) out.add(summary);
+  }
+  return out;
+}
+
+Map<String, Object?>? _extractActiveMatch(Object? raw) {
+  if (raw is! Map) return null;
+  final map = raw.cast<String, Object?>();
+  final match = map['match'];
+  final me = map['me'];
+
+  if (match is! Map || me is! Map) return null;
+
+  return {
+    'match': match.cast<String, Object?>(),
+    'me': me.cast<String, Object?>(),
+  };
+}
+
+int? _estimateOnlinePlayers(
+  List<Map<String, Object?>> lobby,
+  List<Map<String, Object?>> active,
+) {
+  final names = <String>{};
+
+  void addPlayers(Object? rawPlayers) {
+    if (rawPlayers is! List) return;
+    for (final p in rawPlayers) {
+      if (p is! Map) continue;
+      final name = p['name'];
+      if (name is String && name.trim().isNotEmpty) {
+        names.add(name.trim());
+      }
+    }
+  }
+
+  for (final match in lobby) {
+    addPlayers(match['players']);
+  }
+
+  for (final summary in active) {
+    final match = summary['match'];
+    if (match is Map) {
+      addPlayers(match['players']);
+    }
+  }
+
+  return names.isEmpty ? null : names.length;
+}
+
 const _defaultAbandonSeconds = 120;
 const _defaultReconnectSeconds = 5;
 
@@ -49,17 +108,21 @@ int _parsePositiveSeconds(String input, int fallback) {
   return value;
 }
 
+typedef HttpClientBuilder = http.Client Function();
+
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({
     super.key,
     required this.auth,
     required this.ws,
     required this.caps,
+    this.httpClientBuilder,
   });
 
   final AuthService auth;
   final WsService ws;
   final PlatformCaps caps;
+  final HttpClientBuilder? httpClientBuilder;
 
   @override
   State<LobbyScreen> createState() => _LobbyScreenState();
@@ -71,7 +134,16 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
   final _guestNameCtrl = TextEditingController();
 
+  late final http.Client _http =
+      widget.httpClientBuilder?.call() ?? http.Client();
+
   List<Map<String, Object?>> _matches = const [];
+  List<Map<String, Object?>> _activeMatches = const [];
+
+  bool _activeMatchesLoading = false;
+  bool _activeMatchesHttpInFlight = false;
+  String? _activeMatchesError;
+  int? _onlinePlayersEstimate;
 
   String? _pendingActionId;
   String? _pendingMatchId;
@@ -84,6 +156,10 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
     widget.auth.addListener(_onAuthChanged);
     widget.ws.addListener(_onWsChanged);
+
+    if (widget.auth.isLoggedIn && !widget.auth.isGuest) {
+      unawaited(_refreshActiveMatchesHttp());
+    }
 
     // Lobby UX: connect automatically once we have either guest mode or an
     // access token.
@@ -107,10 +183,18 @@ class _LobbyScreenState extends State<LobbyScreen> {
     if (!widget.auth.isLoggedIn) {
       setState(() {
         _matches = const [];
+        _activeMatches = const [];
+        _onlinePlayersEstimate = null;
+        _activeMatchesError = null;
+        _activeMatchesLoading = false;
         _pendingActionId = null;
         _pendingMatchId = null;
       });
       return;
+    }
+
+    if (!widget.auth.isGuest) {
+      unawaited(_refreshActiveMatchesHttp());
     }
 
     if (widget.ws.state == WsConnectionState.disconnected) {
@@ -121,8 +205,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
   void _onWsChanged() {
     if (!mounted) return;
     if (widget.ws.state == WsConnectionState.connected) {
-      // Always refresh lobby list when we connect/reconnect.
-      widget.ws.send(WsInFrame(msg: WsMsg.lobbySnapshotGet()));
+      _refreshAll();
     }
   }
 
@@ -180,33 +263,33 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                  Text('Joining as: ${widget.auth.displayName}'),
-                  const SizedBox(height: 12),
-                  const Text('Team (optional):'),
-                  const SizedBox(height: 8),
-                  SegmentedButton<_TeamChoice>(
-                    segments: const [
-                      ButtonSegment(
-                        value: _TeamChoice.auto,
-                        label: Text('Auto'),
-                      ),
-                      ButtonSegment(
-                        value: _TeamChoice.team0,
-                        label: Text('Team 0'),
-                      ),
-                      ButtonSegment(
-                        value: _TeamChoice.team1,
-                        label: Text('Team 1'),
-                      ),
-                    ],
-                    selected: {teamChoice},
-                    onSelectionChanged: (set) {
-                      setLocalState(() {
-                        teamChoice = set.first;
-                      });
-                    },
-                  ),
-                ],
+                    Text('Joining as: ${widget.auth.displayName}'),
+                    const SizedBox(height: 12),
+                    const Text('Team (optional):'),
+                    const SizedBox(height: 8),
+                    SegmentedButton<_TeamChoice>(
+                      segments: const [
+                        ButtonSegment(
+                          value: _TeamChoice.auto,
+                          label: Text('Auto'),
+                        ),
+                        ButtonSegment(
+                          value: _TeamChoice.team0,
+                          label: Text('Team 0'),
+                        ),
+                        ButtonSegment(
+                          value: _TeamChoice.team1,
+                          label: Text('Team 1'),
+                        ),
+                      ],
+                      selected: {teamChoice},
+                      onSelectionChanged: (set) {
+                        setLocalState(() {
+                          teamChoice = set.first;
+                        });
+                      },
+                    ),
+                  ],
                 ),
               ),
               actions: [
@@ -275,11 +358,85 @@ class _LobbyScreenState extends State<LobbyScreen> {
     );
   }
 
+  void _refreshAll({bool userInitiated = false}) {
+    if (widget.ws.state == WsConnectionState.connected) {
+      widget.ws.send(WsInFrame(msg: WsMsg.lobbySnapshotGet()));
+      if (widget.auth.isLoggedIn && !widget.auth.isGuest) {
+        widget.ws.send(WsInFrame(msg: WsMsg.meActiveMatchesGet()));
+      }
+    }
+
+    if (widget.auth.isLoggedIn && !widget.auth.isGuest) {
+      unawaited(_refreshActiveMatchesHttp(userInitiated: userInitiated));
+    }
+  }
+
+  Future<void> _refreshActiveMatchesHttp({bool userInitiated = false}) async {
+    if (_activeMatchesHttpInFlight) return;
+    if (!widget.auth.isLoggedIn || widget.auth.isGuest) return;
+
+    final token = widget.auth.accessToken;
+    if (token == null || token.isEmpty) return;
+
+    _activeMatchesHttpInFlight = true;
+    if (mounted) {
+      setState(() {
+        _activeMatchesLoading = true;
+        if (userInitiated) {
+          _activeMatchesError = null;
+        }
+      });
+    }
+
+    try {
+      final uri = Uri.parse('${AppConfig.backendBaseUrl}/v1/matches/active');
+      final res = await _http.get(
+        uri,
+        headers: {
+          'authorization': 'Bearer $token',
+          'accept': 'application/json',
+        },
+      );
+
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        throw Exception('HTTP ${res.statusCode}');
+      }
+
+      final payload = (jsonDecode(res.body) as Map).cast<String, Object?>();
+      final matches = _extractActiveMatches(payload['matches']);
+
+      if (!mounted) return;
+      setState(() {
+        _activeMatches = matches;
+        _activeMatchesError = null;
+        _onlinePlayersEstimate = _estimateOnlinePlayers(
+          _matches,
+          _activeMatches,
+        );
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _activeMatchesError = 'Failed to fetch resume list (${e.toString()})';
+      });
+    } finally {
+      _activeMatchesHttpInFlight = false;
+      if (!mounted) return;
+      setState(() {
+        _activeMatchesLoading = false;
+      });
+    }
+  }
+
   Future<void> _showCreateMatchDialog(BuildContext context) async {
     int maxPlayers = 2;
     var teamChoice = _TeamChoice.auto;
-    final abandonCtrl = TextEditingController(text: _defaultAbandonSeconds.toString());
-    final reconnectCtrl = TextEditingController(text: _defaultReconnectSeconds.toString());
+    final abandonCtrl = TextEditingController(
+      text: _defaultAbandonSeconds.toString(),
+    );
+    final reconnectCtrl = TextEditingController(
+      text: _defaultReconnectSeconds.toString(),
+    );
 
     final created = await showDialog<bool>(
       context: context,
@@ -293,79 +450,80 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                  Text('You will create as: ${widget.auth.displayName}'),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<int>(
-                    value: maxPlayers,
-                    decoration: const InputDecoration(
-                      labelText: 'Max players',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 2, child: Text('2 (1v1)')),
-                      DropdownMenuItem(value: 4, child: Text('4 (2v2)')),
-                      DropdownMenuItem(value: 6, child: Text('6 (3v3)')),
-                    ],
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setLocalState(() {
-                        maxPlayers = v;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('Team (optional):'),
-                  const SizedBox(height: 8),
-                  SegmentedButton<_TeamChoice>(
-                    segments: const [
-                      ButtonSegment(
-                        value: _TeamChoice.auto,
-                        label: Text('Auto'),
+                    Text('You will create as: ${widget.auth.displayName}'),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int>(
+                      value: maxPlayers,
+                      decoration: const InputDecoration(
+                        labelText: 'Max players',
+                        border: OutlineInputBorder(),
                       ),
-                      ButtonSegment(
-                        value: _TeamChoice.team0,
-                        label: Text('Team 0'),
-                      ),
-                      ButtonSegment(
-                        value: _TeamChoice.team1,
-                        label: Text('Team 1'),
-                      ),
-                    ],
-                    selected: {teamChoice},
-                    onSelectionChanged: (set) {
-                      setLocalState(() {
-                        teamChoice = set.first;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Inactivity sweeps',
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: abandonCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Disconnect sweep',
-                      helperText: 'Disconnected players longer than this are removed.',
-                      suffixText: 'sec',
-                      border: OutlineInputBorder(),
+                      items: const [
+                        DropdownMenuItem(value: 2, child: Text('2 (1v1)')),
+                        DropdownMenuItem(value: 4, child: Text('4 (2v2)')),
+                        DropdownMenuItem(value: 6, child: Text('6 (3v3)')),
+                      ],
+                      onChanged: (v) {
+                        if (v == null) return;
+                        setLocalState(() {
+                          maxPlayers = v;
+                        });
+                      },
                     ),
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: reconnectCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Reconnect grace',
-                      helperText: 'Delay before sweeps run after a drop.',
-                      suffixText: 'sec',
-                      border: OutlineInputBorder(),
+                    const SizedBox(height: 12),
+                    const Text('Team (optional):'),
+                    const SizedBox(height: 8),
+                    SegmentedButton<_TeamChoice>(
+                      segments: const [
+                        ButtonSegment(
+                          value: _TeamChoice.auto,
+                          label: Text('Auto'),
+                        ),
+                        ButtonSegment(
+                          value: _TeamChoice.team0,
+                          label: Text('Team 0'),
+                        ),
+                        ButtonSegment(
+                          value: _TeamChoice.team1,
+                          label: Text('Team 1'),
+                        ),
+                      ],
+                      selected: {teamChoice},
+                      onSelectionChanged: (set) {
+                        setLocalState(() {
+                          teamChoice = set.first;
+                        });
+                      },
                     ),
-                    keyboardType: TextInputType.number,
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    Text(
+                      'Inactivity sweeps',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: abandonCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Disconnect sweep',
+                        helperText:
+                            'Disconnected players longer than this are removed.',
+                        suffixText: 'sec',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: reconnectCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Reconnect grace',
+                        helperText: 'Delay before sweeps run after a drop.',
+                        suffixText: 'sec',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ],
                 ),
               ),
               actions: [
@@ -470,6 +628,10 @@ class _LobbyScreenState extends State<LobbyScreen> {
             const <Map<String, Object?>>[];
         setState(() {
           _matches = matches;
+          _onlinePlayersEstimate = _estimateOnlinePlayers(
+            _matches,
+            _activeMatches,
+          );
         });
         return;
 
@@ -483,6 +645,10 @@ class _LobbyScreenState extends State<LobbyScreen> {
               if (m['id'] != id) m,
             match,
           ];
+          _onlinePlayersEstimate = _estimateOnlinePlayers(
+            _matches,
+            _activeMatches,
+          );
         });
         return;
 
@@ -494,6 +660,21 @@ class _LobbyScreenState extends State<LobbyScreen> {
             for (final m in _matches)
               if (m['id'] != matchId) m,
           ];
+          _onlinePlayersEstimate = _estimateOnlinePlayers(
+            _matches,
+            _activeMatches,
+          );
+        });
+        return;
+
+      case 'me.active_matches':
+        final matches = _extractActiveMatches(data['matches']);
+        setState(() {
+          _activeMatches = matches;
+          _onlinePlayersEstimate = _estimateOnlinePlayers(
+            _matches,
+            _activeMatches,
+          );
         });
         return;
 
@@ -508,6 +689,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
     widget.ws.removeListener(_onWsChanged);
     _sub?.cancel();
     _guestNameCtrl.dispose();
+    _http.close();
     super.dispose();
   }
 
@@ -558,97 +740,225 @@ class _LobbyScreenState extends State<LobbyScreen> {
     );
   }
 
-  Widget _buildLobbyBody(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ListenableBuilder(
-            listenable: widget.auth,
-            builder: (context, _) {
-              final mode = widget.auth.isGuest ? 'guest' : 'auth';
-              return Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'You: ${widget.auth.displayName} ($mode)',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Edit display name',
-                    onPressed: () => unawaited(_showDisplayNameDialog(context)),
-                    icon: const Icon(Icons.edit),
-                  ),
-                ],
-              );
-            },
-          ),
-          ListenableBuilder(
-            listenable: widget.ws,
-            builder: (context, _) {
-              final rtt = widget.ws.lastPongRttMs;
-              final ver = widget.ws.serverVersion;
-              final sid = widget.ws.sessionId;
+  Widget _buildActiveMatchesSection(BuildContext context) {
+    if (!widget.auth.isLoggedIn || widget.auth.isGuest) {
+      return const SizedBox.shrink();
+    }
 
-              final extras = [
-                if (ver != null) 'v=$ver',
-                if (sid != null) 'sid=$sid',
-                if (rtt != null) 'rtt=${rtt}ms',
-              ];
+    final theme = Theme.of(context);
+    final hasMatches = _activeMatches.isNotEmpty;
 
-              return Text(
-                'WS: ${widget.ws.state}${extras.isEmpty ? '' : '  •  ${extras.join("  •  ")}'}',
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FilledButton(
-                onPressed: widget.ws.state == WsConnectionState.connected
-                    ? null
-                    : () => unawaited(widget.ws.connect()),
-                child: const Text('Connect'),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text('Resume matches', style: theme.textTheme.titleSmall),
+            const Spacer(),
+            if (_activeMatchesLoading)
+              const SizedBox(
+                height: 16,
+                width: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              OutlinedButton(
-                onPressed: widget.ws.state == WsConnectionState.connected
-                    ? () => unawaited(widget.ws.disconnect())
-                    : null,
-                child: const Text('Disconnect'),
-              ),
-              OutlinedButton(
-                onPressed: widget.ws.state == WsConnectionState.connected
-                    ? () {
-                        widget.ws.send(
-                          WsInFrame(msg: WsMsg.lobbySnapshotGet()),
-                        );
-                      }
-                    : null,
-                child: const Text('Refresh lobby'),
-              ),
-              FilledButton.tonal(
-                onPressed: widget.ws.state == WsConnectionState.connected
-                    ? () => unawaited(_showCreateMatchDialog(context))
-                    : null,
-                child: const Text('Create match'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (widget.ws.lastError != null)
-            Text(
-              widget.ws.lastError!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            IconButton(
+              tooltip: 'Refresh resume list',
+              onPressed: _activeMatchesLoading
+                  ? null
+                  : () => _refreshAll(userInitiated: true),
+              icon: const Icon(Icons.refresh),
             ),
-          const SizedBox(height: 12),
-          const Text('Lobby matches:'),
-          const SizedBox(height: 8),
-          Expanded(
-            child: ListView.builder(
+          ],
+        ),
+        if (_activeMatchesError != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              _activeMatchesError!,
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
+          ),
+        if (!hasMatches)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              _activeMatchesLoading
+                  ? 'Loading resume list...'
+                  : 'No active matches to resume.',
+              style: theme.textTheme.bodySmall,
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _activeMatches.length,
+            itemBuilder: (context, idx) {
+              final summary = _activeMatches[idx];
+              final match =
+                  (summary['match'] as Map?)?.cast<String, Object?>() ??
+                  const <String, Object?>{};
+              final me =
+                  (summary['me'] as Map?)?.cast<String, Object?>() ??
+                  const <String, Object?>{};
+
+              final id = (match['id'] as String?) ?? '<unknown>';
+              final phase = (match['phase'] as String?) ?? '?';
+              final players =
+                  (match['players'] as List?)
+                      ?.whereType<Map>()
+                      .map((p) => p['name'])
+                      .whereType<String>()
+                      .toList() ??
+                  const <String>[];
+              final maxPlayers = _readMaxPlayers(match);
+              final spectatorCount = _readSpectatorCount(match);
+
+              final sizeLabel = maxPlayers == null
+                  ? ''
+                  : ' • ${players.length}/$maxPlayers';
+              final spectatorLabel =
+                  spectatorCount == null || spectatorCount == 0
+                  ? ''
+                  : ' • spectators: $spectatorCount';
+              final namesLabel = players.isEmpty
+                  ? ''
+                  : ' • ${players.join(', ')}';
+
+              final ready = me['ready'] == true;
+              final team = me['team'];
+              final disconnected = me['disconnected_at_ms'] != null;
+              final youBits = <String>[];
+              if (team is int || team is num) {
+                youBits.add('team ${team is num ? team.toInt() : team}');
+              }
+              youBits.add(ready ? 'ready' : 'not ready');
+              if (disconnected) youBits.add('disconnected');
+              final youLabel = youBits.isEmpty
+                  ? ''
+                  : ' • you: ${youBits.join(', ')}';
+
+              return Card(
+                child: ListTile(
+                  title: Text('Match $id'),
+                  subtitle: Text(
+                    '$phase$sizeLabel$spectatorLabel$namesLabel$youLabel',
+                  ),
+                  trailing: FilledButton.tonal(
+                    onPressed: () => context.go('/match/$id'),
+                    child: const Text('Resume'),
+                  ),
+                  onTap: () => context.go('/match/$id'),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildLobbyBody(BuildContext context) {
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListenableBuilder(
+              listenable: widget.auth,
+              builder: (context, _) {
+                final mode = widget.auth.isGuest ? 'guest' : 'auth';
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'You: ${widget.auth.displayName} ($mode)',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Edit display name',
+                      onPressed: () =>
+                          unawaited(_showDisplayNameDialog(context)),
+                      icon: const Icon(Icons.edit),
+                    ),
+                  ],
+                );
+              },
+            ),
+            ListenableBuilder(
+              listenable: widget.ws,
+              builder: (context, _) {
+                final rtt = widget.ws.lastPongRttMs;
+                final ver = widget.ws.serverVersion;
+                final sid = widget.ws.sessionId;
+
+                final extras = [
+                  if (ver != null) 'v=$ver',
+                  if (sid != null) 'sid=$sid',
+                  if (rtt != null) 'rtt=${rtt}ms',
+                ];
+
+                return Text(
+                  'WS: ${widget.ws.state}${extras.isEmpty ? '' : '  •  ${extras.join("  •  ")}'}',
+                );
+              },
+            ),
+            if (_onlinePlayersEstimate != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Online players (estimate): ${_onlinePlayersEstimate}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton(
+                  onPressed: widget.ws.state == WsConnectionState.connected
+                      ? null
+                      : () => unawaited(widget.ws.connect()),
+                  child: const Text('Connect'),
+                ),
+                OutlinedButton(
+                  onPressed: widget.ws.state == WsConnectionState.connected
+                      ? () => unawaited(widget.ws.disconnect())
+                      : null,
+                  child: const Text('Disconnect'),
+                ),
+                OutlinedButton(
+                  onPressed: widget.ws.state == WsConnectionState.connected
+                      ? () => _refreshAll(userInitiated: true)
+                      : null,
+                  child: const Text('Refresh lobby'),
+                ),
+                FilledButton.tonal(
+                  onPressed: widget.ws.state == WsConnectionState.connected
+                      ? () => unawaited(_showCreateMatchDialog(context))
+                      : null,
+                  child: const Text('Create match'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (widget.ws.lastError != null)
+              Text(
+                widget.ws.lastError!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            const SizedBox(height: 12),
+            if (widget.auth.isLoggedIn && !widget.auth.isGuest) ...[
+              _buildActiveMatchesSection(context),
+              const SizedBox(height: 12),
+            ],
+            const Text('Lobby matches:'),
+            const SizedBox(height: 8),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               itemCount: _matches.length,
               itemBuilder: (context, idx) {
                 final m = _matches[idx];
@@ -672,8 +982,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
                     : ' • ${players.length}/$maxPlayers';
                 final spectatorLabel =
                     spectatorCount == null || spectatorCount == 0
-                        ? ''
-                        : ' • spectators: ${spectatorCount}';
+                    ? ''
+                    : ' • spectators: ${spectatorCount}';
                 final namesLabel = players.isEmpty
                     ? ''
                     : ' • ${players.join(', ')}';
@@ -681,7 +991,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 return Card(
                   child: ListTile(
                     title: Text('Match $id'),
-                    subtitle: Text('$phase$sizeLabel$spectatorLabel$namesLabel'),
+                    subtitle: Text(
+                      '$phase$sizeLabel$spectatorLabel$namesLabel',
+                    ),
                     trailing: Wrap(
                       spacing: 8,
                       children: [
@@ -707,20 +1019,20 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 );
               },
             ),
-          ),
-          const SizedBox(height: 12),
-          const Text('Incoming (latest first):'),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 180,
-            child: SingleChildScrollView(
-              child: Text(
-                _log,
-                style: const TextStyle(fontFamily: 'monospace'),
+            const SizedBox(height: 12),
+            const Text('Incoming (latest first):'),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 180,
+              child: SingleChildScrollView(
+                child: Text(
+                  _log,
+                  style: const TextStyle(fontFamily: 'monospace'),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
