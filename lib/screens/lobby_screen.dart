@@ -43,6 +43,14 @@ int? _readSpectatorCount(Map<String, Object?> match) {
   return null;
 }
 
+int? _readOnlinePlayers(Map<String, Object?>? stats) {
+  if (stats == null) return null;
+  final raw = stats['online_players'];
+  if (raw is int) return raw;
+  if (raw is num) return raw.toInt();
+  return null;
+}
+
 List<Map<String, Object?>> _extractActiveMatches(Object? raw) {
   if (raw is! List) return const [];
 
@@ -144,6 +152,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
   bool _activeMatchesHttpInFlight = false;
   String? _activeMatchesError;
   int? _onlinePlayersEstimate;
+  int? _onlinePlayersStats;
 
   String? _pendingActionId;
   String? _pendingMatchId;
@@ -185,6 +194,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
         _matches = const [];
         _activeMatches = const [];
         _onlinePlayersEstimate = null;
+        _onlinePlayersStats = null;
         _activeMatchesError = null;
         _activeMatchesLoading = false;
         _pendingActionId = null;
@@ -404,15 +414,13 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
       final payload = (jsonDecode(res.body) as Map).cast<String, Object?>();
       final matches = _extractActiveMatches(payload['matches']);
+      final estimate = _estimateOnlinePlayers(_matches, matches);
 
       if (!mounted) return;
       setState(() {
         _activeMatches = matches;
         _activeMatchesError = null;
-        _onlinePlayersEstimate = _estimateOnlinePlayers(
-          _matches,
-          _activeMatches,
-        );
+        _onlinePlayersEstimate = estimate;
       });
     } catch (e) {
       if (!mounted) return;
@@ -626,55 +634,62 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 .map((m) => m.cast<String, Object?>())
                 .toList() ??
             const <Map<String, Object?>>[];
+        final stats = (data['stats'] as Map?)?.cast<String, Object?>();
+        final onlinePlayers = _readOnlinePlayers(stats);
+        final estimate = _estimateOnlinePlayers(matches, _activeMatches);
         setState(() {
           _matches = matches;
-          _onlinePlayersEstimate = _estimateOnlinePlayers(
-            _matches,
-            _activeMatches,
-          );
+          _onlinePlayersEstimate = estimate;
+          if (stats != null) {
+            _onlinePlayersStats = onlinePlayers;
+          }
         });
         return;
 
       case 'lobby.match.upsert':
         final match = (data['match'] as Map?)?.cast<String, Object?>();
         if (match == null) return;
+        final id = match['id'];
+        final updated = [
+          for (final m in _matches)
+            if (m['id'] != id) m,
+          match,
+        ];
+        final estimate = _estimateOnlinePlayers(updated, _activeMatches);
         setState(() {
-          final id = match['id'];
-          _matches = [
-            for (final m in _matches)
-              if (m['id'] != id) m,
-            match,
-          ];
-          _onlinePlayersEstimate = _estimateOnlinePlayers(
-            _matches,
-            _activeMatches,
-          );
+          _matches = updated;
+          _onlinePlayersEstimate = estimate;
         });
         return;
 
       case 'lobby.match.remove':
         final matchId = data['match_id'];
         if (matchId == null) return;
+        final updated = [
+          for (final m in _matches)
+            if (m['id'] != matchId) m,
+        ];
+        final estimate = _estimateOnlinePlayers(updated, _activeMatches);
         setState(() {
-          _matches = [
-            for (final m in _matches)
-              if (m['id'] != matchId) m,
-          ];
-          _onlinePlayersEstimate = _estimateOnlinePlayers(
-            _matches,
-            _activeMatches,
-          );
+          _matches = updated;
+          _onlinePlayersEstimate = estimate;
         });
         return;
 
       case 'me.active_matches':
         final matches = _extractActiveMatches(data['matches']);
+        final estimate = _estimateOnlinePlayers(_matches, matches);
         setState(() {
           _activeMatches = matches;
-          _onlinePlayersEstimate = _estimateOnlinePlayers(
-            _matches,
-            _activeMatches,
-          );
+          _onlinePlayersEstimate = estimate;
+        });
+        return;
+
+      case 'lobby.stats':
+        final onlinePlayers = _readOnlinePlayers(data);
+        if (onlinePlayers == null) return;
+        setState(() {
+          _onlinePlayersStats = onlinePlayers;
         });
         return;
 
@@ -858,6 +873,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
   }
 
   Widget _buildLobbyBody(BuildContext context) {
+    final onlinePlayers = _onlinePlayersStats ?? _onlinePlayersEstimate;
+    final onlinePlayersIsEstimate = _onlinePlayersStats == null;
+
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -904,11 +922,13 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 );
               },
             ),
-            if (_onlinePlayersEstimate != null)
+            if (onlinePlayers != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  'Online players (estimate): ${_onlinePlayersEstimate}',
+                  onlinePlayersIsEstimate
+                      ? 'Online players (estimate): $onlinePlayers'
+                      : 'Online players: $onlinePlayers',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),

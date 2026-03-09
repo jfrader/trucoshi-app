@@ -208,6 +208,7 @@ void main() {
               'spectator_count': 1,
             },
           ],
+          'stats': {'online_players': 42},
         },
       },
     });
@@ -240,7 +241,7 @@ void main() {
 
     expect(find.text('Resume matches'), findsOneWidget);
     expect(find.text('Match resume-123'), findsOneWidget);
-    expect(find.text('Online players (estimate): 3'), findsOneWidget);
+    expect(find.text('Online players: 42'), findsOneWidget);
 
     expect(httpClient.recordedRequests, isNotEmpty);
     final req = httpClient.recordedRequests.first;
@@ -263,6 +264,131 @@ void main() {
 
     expect(countMsg('lobby.snapshot.get'), 2);
     expect(countMsg('me.active_matches.get'), 2);
+
+    await tester.pumpWidget(const SizedBox());
+
+    await chan.dispose();
+    ws.dispose();
+    auth.dispose();
+    httpClient.close();
+  });
+
+  testWidgets('Lobby swaps from estimate to stats when lobby.stats arrives', (
+    tester,
+  ) async {
+    final auth = AuthService();
+    auth.useToken('test-token', displayName: 'Fran');
+
+    final httpClient = _FakeHttpClient(
+      seed: [
+        _FakeHttpResponse(
+          body: jsonEncode({
+            'matches': [
+              {
+                'match': {
+                  'id': 'resume-123',
+                  'phase': 'playing',
+                  'players': [
+                    {'name': 'Fran'},
+                    {'name': 'Mia'},
+                  ],
+                  'options': {'max_players': 4},
+                  'spectator_count': 2,
+                },
+                'me': {'team': 1, 'ready': false, 'disconnected_at_ms': 1234},
+              },
+            ],
+          }),
+        ),
+      ],
+    );
+
+    final chan = _FakeWebSocketChannel();
+    final caps = const PlatformCaps(supportsWsAuthHeaders: true);
+
+    final ws = WsService(
+      auth: auth,
+      caps: caps,
+      channelFactory: (uri, {headers}) => chan,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(
+          useMaterial3: true,
+          colorSchemeSeed: Colors.deepOrange,
+        ),
+        home: LobbyScreen(
+          auth: auth,
+          ws: ws,
+          caps: caps,
+          httpClientBuilder: () => httpClient,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    chan.serverAddJson({
+      'v': 2,
+      'msg': {
+        'type': 'lobby.snapshot',
+        'data': {
+          'matches': [
+            {
+              'id': 'm1',
+              'phase': 'lobby',
+              'players': [
+                {'name': 'Fran'},
+                {'name': 'Lia'},
+              ],
+              'options': {'max_players': 4},
+              'spectator_count': 1,
+            },
+          ],
+          'stats': null,
+        },
+      },
+    });
+
+    chan.serverAddJson({
+      'v': 2,
+      'msg': {
+        'type': 'me.active_matches',
+        'data': {
+          'matches': [
+            {
+              'match': {
+                'id': 'resume-123',
+                'phase': 'playing',
+                'players': [
+                  {'name': 'Fran'},
+                  {'name': 'Mia'},
+                ],
+                'options': {'max_players': 4},
+                'spectator_count': 2,
+              },
+              'me': {'team': 1, 'ready': false, 'disconnected_at_ms': 1234},
+            },
+          ],
+        },
+      },
+    });
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Online players (estimate): 3'), findsOneWidget);
+
+    chan.serverAddJson({
+      'v': 2,
+      'msg': {
+        'type': 'lobby.stats',
+        'data': {'online_players': 9},
+      },
+    });
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Online players: 9'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
 
