@@ -4,8 +4,11 @@ import 'package:go_router/go_router.dart';
 import '../platform/platform_caps.dart';
 import '../screens/lobby_screen.dart';
 import '../screens/login_screen.dart';
+import '../screens/match_history_screen.dart';
 import '../screens/match_screen.dart';
+import '../screens/player_profile_screen.dart';
 import '../screens/table_screen.dart';
+import '../screens/leaderboard_screen.dart';
 import '../services/auth_service.dart';
 import '../services/ws/ws_service.dart';
 
@@ -58,6 +61,25 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
           path: '/lobby',
           builder: (context, state) =>
               LobbyScreen(auth: _auth, ws: _ws, caps: _caps),
+        ),
+        GoRoute(
+          path: '/stats/leaderboard',
+          builder: (context, state) => LeaderboardScreen(auth: _auth),
+        ),
+        GoRoute(
+          path: '/stats/player/:id',
+          builder: (context, state) {
+            final rawId = state.pathParameters['id'] ?? '0';
+            final id = int.tryParse(rawId) ?? -1;
+            return PlayerProfileScreen(auth: _auth, userId: id);
+          },
+        ),
+        GoRoute(
+          path: '/history/match/:id',
+          builder: (context, state) {
+            final id = state.pathParameters['id']!;
+            return MatchHistoryScreen(auth: _auth, matchId: id);
+          },
         ),
         GoRoute(
           path: '/match/:id',

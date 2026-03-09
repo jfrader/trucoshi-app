@@ -1065,6 +1065,11 @@ class _LobbyScreenState extends State<LobbyScreen> {
       appBar: AppBar(
         title: const Text('Lobby'),
         actions: [
+          IconButton(
+            tooltip: 'Leaderboard',
+            onPressed: () => context.go('/stats/leaderboard'),
+            icon: const Icon(Icons.leaderboard),
+          ),
           if (!isLoggedIn) ...[
             if (widget.caps.supportsWsAuthHeaders)
               IconButton(
