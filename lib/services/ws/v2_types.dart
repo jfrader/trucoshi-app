@@ -262,6 +262,15 @@ class WsMsg {
   static WsMsg matchPause({required String matchId}) =>
       WsMsg(type: 'match.pause', data: {'match_id': matchId});
 
+  static WsMsg matchPauseVote({
+    required String matchId,
+    required bool accept,
+  }) =>
+      WsMsg(
+        type: 'match.pause.vote',
+        data: {'match_id': matchId, 'accept': accept},
+      );
+
   static WsMsg matchResume({required String matchId}) =>
       WsMsg(type: 'match.resume', data: {'match_id': matchId});
 

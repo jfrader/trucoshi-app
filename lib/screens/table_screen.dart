@@ -4,9 +4,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../models/pause_models.dart';
 import '../services/ws/v2_types.dart';
 import '../services/ws/ws_service.dart';
 import '../widgets/match_chat_panel.dart';
+import '../widgets/pause_banner.dart';
 import '../widgets/status_chip.dart';
 import '../widgets/team_score_chip.dart';
 import '../widgets/truco_card.dart';
@@ -37,6 +39,11 @@ class _TableScreenState extends State<TableScreen> {
   bool _showingKickedDialog = false;
 
   String? _selectedCommand;
+
+  String? _pendingPauseActionId;
+  String? _pendingResumeActionId;
+  String? _pendingPauseVoteActionId;
+  bool _pauseVoteSubmitting = false;
 
   @override
   void initState() {
@@ -78,9 +85,41 @@ class _TableScreenState extends State<TableScreen> {
     if (type == 'error') {
       final code = data?['code'] as String?;
       final msg = data?['message'] as String?;
+      final isPauseError =
+          _pendingPauseActionId != null && frame.id == _pendingPauseActionId;
+      final isResumeError =
+          _pendingResumeActionId != null && frame.id == _pendingResumeActionId;
+      final isPauseVoteError =
+          _pendingPauseVoteActionId != null &&
+          frame.id == _pendingPauseVoteActionId;
       setState(() {
         _lastError = '${code ?? 'ERROR'}: ${msg ?? 'request failed'}';
+        if (isPauseError) _pendingPauseActionId = null;
+        if (isResumeError) _pendingResumeActionId = null;
+        if (isPauseVoteError) _pendingPauseVoteActionId = null;
+        if (isPauseVoteError) _pauseVoteSubmitting = false;
       });
+      return;
+    }
+
+    if (type == 'ok') {
+      final matchesPause =
+          _pendingPauseActionId != null && frame.id == _pendingPauseActionId;
+      final matchesResume =
+          _pendingResumeActionId != null && frame.id == _pendingResumeActionId;
+      final matchesVote =
+          _pendingPauseVoteActionId != null &&
+          frame.id == _pendingPauseVoteActionId;
+      if (matchesPause || matchesResume || matchesVote) {
+        setState(() {
+          if (matchesPause) _pendingPauseActionId = null;
+          if (matchesResume) _pendingResumeActionId = null;
+          if (matchesVote) {
+            _pendingPauseVoteActionId = null;
+            _pauseVoteSubmitting = false;
+          }
+        });
+      }
       return;
     }
 
@@ -95,9 +134,21 @@ class _TableScreenState extends State<TableScreen> {
 
       final me = (data['me'] as Map?)?.cast<String, Object?>();
 
+      final matchedPauseAction =
+          _pendingPauseActionId != null && frame.id == _pendingPauseActionId;
+      final matchedResumeAction =
+          _pendingResumeActionId != null && frame.id == _pendingResumeActionId;
+      final matchedPauseVoteAction =
+          _pendingPauseVoteActionId != null &&
+          frame.id == _pendingPauseVoteActionId;
+
       setState(() {
         _match = match;
         if (me != null) _me = me;
+        if (matchedPauseAction) _pendingPauseActionId = null;
+        if (matchedResumeAction) _pendingResumeActionId = null;
+        if (matchedPauseVoteAction) _pendingPauseVoteActionId = null;
+        _pauseVoteSubmitting = false;
       });
 
       return;
@@ -202,6 +253,58 @@ class _TableScreenState extends State<TableScreen> {
     ).showSnackBar(SnackBar(content: Text('Removing $displayName…')));
   }
 
+  void _requestPause() {
+    if (!mounted || _pendingPauseActionId != null) return;
+    final actionId =
+        'pause-' + DateTime.now().microsecondsSinceEpoch.toString();
+    setState(() {
+      _pendingPauseActionId = actionId;
+    });
+    widget.ws.send(
+      WsInFrame(
+        id: actionId,
+        msg: WsMsg.matchPause(matchId: widget.matchId),
+      ),
+    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Requesting pause…')));
+  }
+
+  void _requestResume() {
+    if (!mounted || _pendingResumeActionId != null) return;
+    final actionId =
+        'resume-' + DateTime.now().microsecondsSinceEpoch.toString();
+    setState(() {
+      _pendingResumeActionId = actionId;
+    });
+    widget.ws.send(
+      WsInFrame(
+        id: actionId,
+        msg: WsMsg.matchResume(matchId: widget.matchId),
+      ),
+    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Resuming match…')));
+  }
+
+  void _submitPauseVote(bool accept) {
+    if (!mounted || _pauseVoteSubmitting) return;
+    final actionId =
+        'pause-vote-' + DateTime.now().microsecondsSinceEpoch.toString();
+    setState(() {
+      _pauseVoteSubmitting = true;
+      _pendingPauseVoteActionId = actionId;
+    });
+    widget.ws.send(
+      WsInFrame(
+        id: actionId,
+        msg: WsMsg.matchPauseVote(matchId: widget.matchId, accept: accept),
+      ),
+    );
+  }
+
   void _goToLobby() {
     if (!mounted) return;
     final router = GoRouter.maybeOf(context);
@@ -231,10 +334,38 @@ class _TableScreenState extends State<TableScreen> {
     final spectatorCount = _readSpectatorCount(match);
     final meSeatIdx = me?['seat_idx'] as int?;
     final isSpectating = meSeatIdx == null;
+    final phase = match?['phase'] as String?;
+    final pauseRequest = readPauseRequest(match);
+    final pendingUnpause = readPendingUnpause(match);
+    final pauseAwaitingSeats = pauseRequest == null
+        ? const <PauseAwaitingSeat>[]
+        : buildPauseAwaitingSeats(
+            request: pauseRequest,
+            players: players,
+            meSeatIdx: meSeatIdx,
+          );
+    final requestedByLabel = pauseRequest == null
+        ? ''
+        : describePauseRequester(pauseRequest, players);
+    final awaitingTeamLabel = pauseRequest == null
+        ? ''
+        : 'Team ${pauseRequest.awaitingTeam}';
+
     final turnSeatIdx = _readTurnSeatIdx(game);
     final forehandSeatIdx = _readForehandSeatIdx(game);
 
     final myTeamIdx = _readMyTeamIdx(players, meSeatIdx);
+    final isAwaitingMember =
+        pauseRequest != null &&
+        myTeamIdx != null &&
+        pauseRequest.awaitingTeam == myTeamIdx;
+    final hasAccepted =
+        pauseRequest != null &&
+        meSeatIdx != null &&
+        pauseRequest.acceptedSeatIdxs.contains(meSeatIdx);
+    final canVote = pauseRequest != null && phase == 'started';
+    final isPaused = phase == 'paused';
+
     final teamPoints = _readTeamPoints(match);
     final winnerTeamIdx = _readWinnerTeamIdx(game);
 
@@ -246,10 +377,15 @@ class _TableScreenState extends State<TableScreen> {
     final roundInfo = _readRoundInfo(game);
 
     final canPlay =
-        meSeatIdx != null && turnSeatIdx != null && meSeatIdx == turnSeatIdx;
+        !isPaused &&
+        meSeatIdx != null &&
+        turnSeatIdx != null &&
+        meSeatIdx == turnSeatIdx;
     final canPlayCard = canPlay && handState == 'waiting_play';
     final statusText = isSpectating
         ? 'Spectating: live view only.'
+        : isPaused
+        ? 'Match paused.'
         : canPlayCard
         ? 'Your turn.'
         : canPlay
@@ -259,6 +395,10 @@ class _TableScreenState extends State<TableScreen> {
     final bool iAmOwner =
         meSeatIdx != null && ownerSeatIdx != null && meSeatIdx == ownerSeatIdx;
     final wsConnected = widget.ws.state == WsConnectionState.connected;
+    final canPause = phase == 'started' && iAmOwner && pauseRequest == null;
+    final pausePending = _pendingPauseActionId != null;
+    final canResume = phase == 'paused' && iAmOwner && pendingUnpause == null;
+    final resumePending = _pendingResumeActionId != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -364,6 +504,34 @@ class _TableScreenState extends State<TableScreen> {
               ],
             ),
           ),
+          if (pauseRequest != null) ...[
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              child: PauseRequestBanner(
+                requestedByLabel: requestedByLabel,
+                awaitingTeamLabel: awaitingTeamLabel,
+                awaitingSeats: pauseAwaitingSeats,
+                expiresAtMs: pauseRequest!.expiresAtMs,
+                isAwaitingMember: isAwaitingMember,
+                canVote:
+                    canVote && widget.ws.state == WsConnectionState.connected,
+                hasAccepted: hasAccepted,
+                voteSubmitting: _pauseVoteSubmitting,
+                onAccept: () => _submitPauseVote(true),
+                onDecline: () => _submitPauseVote(false),
+              ),
+            ),
+          ],
+          if (pendingUnpause != null) ...[
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              child: PendingUnpauseBanner(
+                resumeAtMs: pendingUnpause!.resumeAtMs,
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Expanded(
             child: Padding(
@@ -472,6 +640,57 @@ class _TableScreenState extends State<TableScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (canPause || canResume) ...[
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        if (canPause)
+                          FilledButton.icon(
+                            onPressed:
+                                pausePending ||
+                                    widget.ws.state !=
+                                        WsConnectionState.connected
+                                ? null
+                                : _requestPause,
+                            icon: pausePending
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.pause),
+                            label: Text(
+                              pausePending ? 'Pausing…' : 'Pause match',
+                            ),
+                          ),
+                        if (canResume)
+                          FilledButton.icon(
+                            onPressed:
+                                resumePending ||
+                                    widget.ws.state !=
+                                        WsConnectionState.connected
+                                ? null
+                                : _requestResume,
+                            icon: resumePending
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.play_arrow),
+                            label: Text(
+                              resumePending ? 'Resuming…' : 'Resume match',
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   if (!isSpectating && myCommands.isNotEmpty) ...[
                     DropdownButtonFormField<String>(
                       value: myCommands.contains(_selectedCommand)
@@ -485,7 +704,9 @@ class _TableScreenState extends State<TableScreen> {
                         for (final c in myCommands)
                           DropdownMenuItem(value: c, child: Text(c)),
                       ],
-                      onChanged: widget.ws.state == WsConnectionState.connected
+                      onChanged:
+                          widget.ws.state == WsConnectionState.connected &&
+                              !isPaused
                           ? (v) {
                               if (v == null) return;
 
