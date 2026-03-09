@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../services/ws/v2_types.dart';
 import '../services/ws/ws_service.dart';
+import '../widgets/match_chat_panel.dart';
 import '../widgets/status_chip.dart';
 import '../widgets/team_score_chip.dart';
 import '../widgets/truco_card.dart';
@@ -465,105 +466,121 @@ class _TableScreenState extends State<TableScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (!isSpectating && myCommands.isNotEmpty) ...[
-                  DropdownButtonFormField<String>(
-                    value: myCommands.contains(_selectedCommand)
-                        ? _selectedCommand
-                        : null,
-                    decoration: const InputDecoration(
-                      labelText: 'Commands',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      for (final c in myCommands)
-                        DropdownMenuItem(value: c, child: Text(c)),
-                    ],
-                    onChanged: widget.ws.state == WsConnectionState.connected
-                        ? (v) {
-                            if (v == null) return;
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!isSpectating && myCommands.isNotEmpty) ...[
+                    DropdownButtonFormField<String>(
+                      value: myCommands.contains(_selectedCommand)
+                          ? _selectedCommand
+                          : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Commands',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        for (final c in myCommands)
+                          DropdownMenuItem(value: c, child: Text(c)),
+                      ],
+                      onChanged: widget.ws.state == WsConnectionState.connected
+                          ? (v) {
+                              if (v == null) return;
 
-                            widget.ws.send(
-                              WsInFrame(
-                                msg: WsMsg.gameSay(
-                                  matchId: widget.matchId,
-                                  command: v,
+                              widget.ws.send(
+                                WsInFrame(
+                                  msg: WsMsg.gameSay(
+                                    matchId: widget.matchId,
+                                    command: v,
+                                  ),
                                 ),
-                              ),
-                            );
+                              );
 
-                            // Keep the dropdown ready for the next command.
-                            setState(() {
-                              _selectedCommand = null;
-                            });
-                          }
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                if (isSpectating)
+                              // Keep the dropdown ready for the next command.
+                              setState(() {
+                                _selectedCommand = null;
+                              });
+                            }
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (isSpectating)
+                    Text(
+                      'Spectating: hands and commands are hidden.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    )
+                  else if (myHand.isEmpty)
+                    const Text('Hand: (not available yet)')
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (var i = 0; i < myHand.length; i++)
+                          _HandCard(
+                            card: myHand[i],
+                            enabled:
+                                widget.ws.state ==
+                                    WsConnectionState.connected &&
+                                canPlayCard,
+                            onPlay: () {
+                              widget.ws.send(
+                                WsInFrame(
+                                  msg: WsMsg.gamePlayCard(
+                                    matchId: widget.matchId,
+                                    cardIdx: i,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  if (!isSpectating && myUsed.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      'Used:',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final c in myUsed)
+                          TrucoCardImage(
+                            c,
+                            width: 40,
+                            height: 60,
+                            elevation: 1,
+                          ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 8),
                   Text(
-                    'Spectating: hands and commands are hidden.',
+                    statusText,
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
-                  )
-                else if (myHand.isEmpty)
-                  const Text('Hand: (not available yet)')
-                else
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (var i = 0; i < myHand.length; i++)
-                        _HandCard(
-                          card: myHand[i],
-                          enabled:
-                              widget.ws.state == WsConnectionState.connected &&
-                              canPlayCard,
-                          onPlay: () {
-                            widget.ws.send(
-                              WsInFrame(
-                                msg: WsMsg.gamePlayCard(
-                                  matchId: widget.matchId,
-                                  cardIdx: i,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                    ],
                   ),
-                if (!isSpectating && myUsed.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    'Used:',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final c in myUsed)
-                        TrucoCardImage(c, width: 40, height: 60, elevation: 1),
-                    ],
+                  const SizedBox(height: 16),
+                  MatchChatPanel(
+                    ws: widget.ws,
+                    roomId: widget.matchId,
+                    maxHeight: 200,
+                    showEmojiRow: false,
+                    title: 'Live chat',
                   ),
                 ],
-                const SizedBox(height: 8),
-                Text(
-                  statusText,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ],

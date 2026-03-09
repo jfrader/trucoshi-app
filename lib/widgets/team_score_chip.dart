@@ -24,14 +24,14 @@ class TeamScoreChip extends StatelessWidget {
     final bg = winner
         ? base.withOpacity(0.25)
         : highlight
-            ? scheme.secondaryContainer
-            : scheme.surfaceContainerHighest;
+        ? scheme.secondaryContainer
+        : scheme.surfaceContainerHighest;
 
     final border = winner
         ? Border.all(color: base, width: 2)
         : highlight
-            ? Border.all(color: scheme.secondary, width: 2)
-            : Border.all(color: scheme.outlineVariant);
+        ? Border.all(color: scheme.secondary, width: 2)
+        : Border.all(color: scheme.outlineVariant);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

@@ -87,7 +87,9 @@ class _FakeWebSocketChannel
 }
 
 void main() {
-  testWidgets('Match screen shows summary, options, and players', (tester) async {
+  testWidgets('Match screen shows summary, options, and players', (
+    tester,
+  ) async {
     final auth = AuthService();
     auth.continueAsGuest(displayName: 'Fran');
 
@@ -232,10 +234,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Remove player'));
 
-    await tester.tap(
-      find.text('Remove player'),
-      warnIfMissed: false,
-    );
+    await tester.tap(find.text('Remove player'), warnIfMissed: false);
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);
     await tester.tap(find.text('Remove').last);
@@ -314,10 +313,7 @@ void main() {
       'v': 2,
       'msg': {
         'type': 'match.kicked',
-        'data': {
-          'match_id': 'm1',
-          'reason': 'owner_kick',
-        },
+        'data': {'match_id': 'm1', 'reason': 'owner_kick'},
       },
     });
     await tester.pumpAndSettle();
@@ -332,5 +328,4 @@ void main() {
     ws.dispose();
     auth.dispose();
   });
-
 }

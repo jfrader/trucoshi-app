@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../services/ws/v2_types.dart';
 import '../services/ws/ws_service.dart';
+import '../widgets/match_chat_panel.dart';
 import '../widgets/status_chip.dart';
 import '../widgets/team_score_chip.dart';
 import '../utils/kick_reason.dart';
@@ -72,7 +73,8 @@ class _MatchScreenState extends State<MatchScreen> {
 
       final matchId = m['id'] as String?;
       final isRematchResponse =
-          _pendingRematchActionId != null && frame.id == _pendingRematchActionId;
+          _pendingRematchActionId != null &&
+          frame.id == _pendingRematchActionId;
       if (matchId != null && matchId != widget.matchId) {
         if (isRematchResponse) {
           final newMatchId = matchId;
@@ -95,7 +97,8 @@ class _MatchScreenState extends State<MatchScreen> {
         _lastPhase = phase ?? _lastPhase;
       });
 
-      if (_pendingOptionsActionId != null && frame.id == _pendingOptionsActionId) {
+      if (_pendingOptionsActionId != null &&
+          frame.id == _pendingOptionsActionId) {
         setState(() {
           _pendingOptionsActionId = null;
         });
@@ -106,7 +109,8 @@ class _MatchScreenState extends State<MatchScreen> {
         }
       }
 
-      if (_pendingRematchActionId != null && frame.id == _pendingRematchActionId) {
+      if (_pendingRematchActionId != null &&
+          frame.id == _pendingRematchActionId) {
         setState(() {
           _pendingRematchActionId = null;
         });
@@ -165,9 +169,11 @@ class _MatchScreenState extends State<MatchScreen> {
       final code = data['code'] as String?;
       final msg = data['message'] as String?;
       final isOptionsError =
-          _pendingOptionsActionId != null && frame.id == _pendingOptionsActionId;
+          _pendingOptionsActionId != null &&
+          frame.id == _pendingOptionsActionId;
       final isRematchError =
-          _pendingRematchActionId != null && frame.id == _pendingRematchActionId;
+          _pendingRematchActionId != null &&
+          frame.id == _pendingRematchActionId;
       if (isOptionsError) {
         setState(() {
           _pendingOptionsActionId = null;
@@ -246,17 +252,14 @@ class _MatchScreenState extends State<MatchScreen> {
 
     widget.ws.send(
       WsInFrame(
-        msg: WsMsg.matchKick(
-          matchId: widget.matchId,
-          seatIdx: seatIdx,
-        ),
+        msg: WsMsg.matchKick(matchId: widget.matchId, seatIdx: seatIdx),
       ),
     );
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Removing $displayName…')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Removing $displayName…')));
   }
 
   Future<void> _showEditOptionsDialog() async {
@@ -270,17 +273,21 @@ class _MatchScreenState extends State<MatchScreen> {
     int turnSeconds = (((_readTurnTimeMs(match) ?? 30000) / 1000).round())
         .clamp(1, 600)
         .toInt();
-    int abandonSeconds = (((_readAbandonTimeMs(match) ?? 120000) / 1000).round())
-        .clamp(1, 600)
-        .toInt();
-    int reconnectSeconds = (((_readReconnectGraceMs(match) ?? 5000) / 1000).round())
-        .clamp(1, 60)
-        .toInt();
+    int abandonSeconds =
+        (((_readAbandonTimeMs(match) ?? 120000) / 1000).round())
+            .clamp(1, 600)
+            .toInt();
+    int reconnectSeconds =
+        (((_readReconnectGraceMs(match) ?? 5000) / 1000).round())
+            .clamp(1, 60)
+            .toInt();
 
     final matchPointsCtrl = TextEditingController(text: matchPoints.toString());
     final turnCtrl = TextEditingController(text: turnSeconds.toString());
     final abandonCtrl = TextEditingController(text: abandonSeconds.toString());
-    final reconnectCtrl = TextEditingController(text: reconnectSeconds.toString());
+    final reconnectCtrl = TextEditingController(
+      text: reconnectSeconds.toString(),
+    );
 
     try {
       final saved = await showDialog<bool>(
@@ -463,7 +470,8 @@ class _MatchScreenState extends State<MatchScreen> {
     required int reconnectGraceMs,
   }) {
     if (!mounted) return;
-    final actionId = 'options-' + DateTime.now().microsecondsSinceEpoch.toString();
+    final actionId =
+        'options-' + DateTime.now().microsecondsSinceEpoch.toString();
     setState(() {
       _pendingOptionsActionId = actionId;
     });
@@ -482,14 +490,15 @@ class _MatchScreenState extends State<MatchScreen> {
         ),
       ),
     );
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Updating match options…')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Updating match options…')));
   }
 
   void _requestRematch() {
     if (!mounted || _pendingRematchActionId != null) return;
-    final actionId = 'rematch-' + DateTime.now().microsecondsSinceEpoch.toString();
+    final actionId =
+        'rematch-' + DateTime.now().microsecondsSinceEpoch.toString();
     setState(() {
       _pendingRematchActionId = actionId;
     });
@@ -499,9 +508,9 @@ class _MatchScreenState extends State<MatchScreen> {
         msg: WsMsg.matchRematch(matchId: widget.matchId),
       ),
     );
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Creating rematch…')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Creating rematch…')));
   }
 
   void _goToLobby() {
@@ -530,10 +539,10 @@ class _MatchScreenState extends State<MatchScreen> {
 
     final players =
         (_match?['players'] as List?)
-                ?.whereType<Map>()
-                .map((p) => p.cast<String, Object?>())
-                .toList() ??
-            const <Map<String, Object?>>[];
+            ?.whereType<Map>()
+            .map((p) => p.cast<String, Object?>())
+            .toList() ??
+        const <Map<String, Object?>>[];
 
     final spectatorCount = _readSpectatorCount(_match);
     final meSeatIdx = _me?['seat_idx'] as int?;
@@ -551,8 +560,9 @@ class _MatchScreenState extends State<MatchScreen> {
         players.isNotEmpty &&
         players.every((p) => (p['ready'] as bool?) == true);
 
-    final readyCount =
-        players.where((p) => (p['ready'] as bool?) == true).length;
+    final readyCount = players
+        .where((p) => (p['ready'] as bool?) == true)
+        .length;
 
     final matchName = (_match?['name'] as String?) ?? widget.matchId;
     final maxPlayers = _readMaxPlayers(_match);
@@ -569,15 +579,15 @@ class _MatchScreenState extends State<MatchScreen> {
     final canEditOptions = iAmOwner && phase == 'lobby';
     final optionsSaving = _pendingOptionsActionId != null;
     final canSubmitOptionChanges =
-        canEditOptions && widget.ws.state == WsConnectionState.connected && !optionsSaving;
+        canEditOptions &&
+        widget.ws.state == WsConnectionState.connected &&
+        !optionsSaving;
     final canRematch = phase == 'finished' && iAmOwner;
     final rematchPending = _pendingRematchActionId != null;
 
     final metaChips = <Widget>[];
     if (phase != null) {
-      metaChips.add(
-        StatusChip(icon: Icons.timelapse, label: 'phase: $phase'),
-      );
+      metaChips.add(StatusChip(icon: Icons.timelapse, label: 'phase: $phase'));
     }
     metaChips.add(
       StatusChip(
@@ -647,7 +657,9 @@ class _MatchScreenState extends State<MatchScreen> {
     if (florEnabled != null) {
       optionChips.add(
         StatusChip(
-          icon: florEnabled ? Icons.local_florist : Icons.local_florist_outlined,
+          icon: florEnabled
+              ? Icons.local_florist
+              : Icons.local_florist_outlined,
           label: florEnabled ? 'Flor enabled' : 'Flor disabled',
           tone: florEnabled ? scheme.tertiary : scheme.error,
         ),
@@ -721,16 +733,9 @@ class _MatchScreenState extends State<MatchScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  matchName,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+                Text(matchName, style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: metaChips,
-                ),
+                Wrap(spacing: 8, runSpacing: 8, children: metaChips),
                 if (teamPoints != null) ...[
                   const SizedBox(height: 12),
                   Row(
@@ -769,39 +774,37 @@ class _MatchScreenState extends State<MatchScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  'Players',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+                Text('Players', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 if (players.isEmpty)
                   Text(
                     'No players yet. Waiting for lobby updates…',
                     style: TextStyle(color: scheme.onSurfaceVariant),
                   )
-                else
-                  ...[
-                    for (var i = 0; i < players.length; i++) ...[
-                      if (i > 0) const Divider(),
-                      _PlayerRow(
-                        seatIdx: i,
-                        name: (players[i]['name'] as String?) ?? 'player',
-                        teamLabel: _teamLabel(players[i]['team']),
-                        ready: players[i]['ready'] == true,
-                        isMe: meSeatIdx == i,
-                        isOwner: ownerSeatIdx == i,
-                        onKick: (iAmOwner &&
-                                meSeatIdx != null &&
-                                i != meSeatIdx &&
-                                widget.ws.state == WsConnectionState.connected)
-                            ? () => _confirmKick(
-                                  seatIdx: i,
-                                  displayName: (players[i]['name'] as String?) ?? 'player',
-                                )
-                            : null,
-                      ),
-                    ],
+                else ...[
+                  for (var i = 0; i < players.length; i++) ...[
+                    if (i > 0) const Divider(),
+                    _PlayerRow(
+                      seatIdx: i,
+                      name: (players[i]['name'] as String?) ?? 'player',
+                      teamLabel: _teamLabel(players[i]['team']),
+                      ready: players[i]['ready'] == true,
+                      isMe: meSeatIdx == i,
+                      isOwner: ownerSeatIdx == i,
+                      onKick:
+                          (iAmOwner &&
+                              meSeatIdx != null &&
+                              i != meSeatIdx &&
+                              widget.ws.state == WsConnectionState.connected)
+                          ? () => _confirmKick(
+                              seatIdx: i,
+                              displayName:
+                                  (players[i]['name'] as String?) ?? 'player',
+                            )
+                          : null,
+                    ),
                   ],
+                ],
               ],
             ),
           ),
@@ -822,11 +825,7 @@ class _MatchScreenState extends State<MatchScreen> {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: optionChips,
-                  ),
+                  Wrap(spacing: 8, runSpacing: 8, children: optionChips),
                   if (canEditOptions) ...[
                     const SizedBox(height: 12),
                     Align(
@@ -839,7 +838,9 @@ class _MatchScreenState extends State<MatchScreen> {
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.tune),
                         label: Text(optionsSaving ? 'Saving…' : 'Edit options'),
@@ -892,9 +893,7 @@ class _MatchScreenState extends State<MatchScreen> {
         onPressed: widget.ws.state == WsConnectionState.connected
             ? () {
                 widget.ws.send(
-                  WsInFrame(
-                    msg: WsMsg.matchLeave(matchId: widget.matchId),
-                  ),
+                  WsInFrame(msg: WsMsg.matchLeave(matchId: widget.matchId)),
                 );
               }
             : null,
@@ -907,7 +906,8 @@ class _MatchScreenState extends State<MatchScreen> {
       actionButtons.insert(
         0,
         FilledButton.icon(
-          onPressed: rematchPending || widget.ws.state != WsConnectionState.connected
+          onPressed:
+              rematchPending || widget.ws.state != WsConnectionState.connected
               ? null
               : _requestRematch,
           icon: rematchPending
@@ -966,14 +966,13 @@ class _MatchScreenState extends State<MatchScreen> {
       Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: actionButtons,
-          ),
+          child: Wrap(spacing: 12, runSpacing: 12, children: actionButtons),
         ),
       ),
     );
+
+    children.add(const SizedBox(height: 12));
+    children.add(MatchChatPanel(ws: widget.ws, roomId: widget.matchId));
 
     children.add(const SizedBox(height: 12));
     children.add(_DebugTile(title: 'Match JSON', body: matchPretty));
@@ -1002,10 +1001,7 @@ class _MatchScreenState extends State<MatchScreen> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: children,
-      ),
+      body: ListView(padding: const EdgeInsets.all(16), children: children),
     );
   }
 }
@@ -1033,8 +1029,9 @@ class _PlayerRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final trimmed = name.trim();
-    final initial =
-        trimmed.isEmpty ? seatIdx.toString() : trimmed.substring(0, 1).toUpperCase();
+    final initial = trimmed.isEmpty
+        ? seatIdx.toString()
+        : trimmed.substring(0, 1).toUpperCase();
 
     final chips = <Widget>[
       if (isMe)
@@ -1074,11 +1071,7 @@ class _PlayerRow extends StatelessWidget {
                   style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: chips,
-                ),
+                Wrap(spacing: 8, runSpacing: 8, children: chips),
                 if (onKick != null) ...[
                   const SizedBox(height: 8),
                   Align(
@@ -1304,7 +1297,12 @@ String _teamLabel(Object? raw) {
   return '?';
 }
 
-int _parseBoundedInt(String input, {required int fallback, int? min, int? max}) {
+int _parseBoundedInt(
+  String input, {
+  required int fallback,
+  int? min,
+  int? max,
+}) {
   final trimmed = input.trim();
   final value = int.tryParse(trimmed);
   if (value == null) return fallback;

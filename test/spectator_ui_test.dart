@@ -225,9 +225,7 @@ void main() {
         'type': 'game.snapshot',
         'data': {
           'match_id': 'm1',
-          'game': {
-            'rounds': [],
-          },
+          'game': {'rounds': []},
         },
       },
     });
