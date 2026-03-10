@@ -141,10 +141,145 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<String?> sendVerificationEmail() async {
+    final token = _accessToken;
+    if (token == null || token.isEmpty) {
+      return 'Necesitás iniciar sesión para reenviar el email de verificación.';
+    }
+
+    final uri = Uri.parse(
+      '${AppConfig.backendBaseUrl}/v1/auth/send-verification-email',
+    );
+
+    try {
+      final res = await _http.post(
+        uri,
+        headers: {'authorization': 'Bearer $token'},
+      );
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        return null;
+      }
+
+      return _errorFromResponse(
+        res,
+        'No pudimos enviar el email de verificación',
+      );
+    } catch (e) {
+      return 'No pudimos enviar el email de verificación: $e';
+    }
+  }
+
+  Future<String?> verifyEmail(String token) async {
+    final trimmed = token.trim();
+    if (trimmed.isEmpty) {
+      return 'El token de verificación es obligatorio.';
+    }
+
+    final uri = Uri.parse('${AppConfig.backendBaseUrl}/v1/auth/verify-email');
+
+    try {
+      final res = await _http.post(
+        uri,
+        headers: {'content-type': 'application/json'},
+        body: jsonEncode({'token': trimmed}),
+      );
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        return null;
+      }
+
+      return _errorFromResponse(res, 'El token no es válido o expiró');
+    } catch (e) {
+      return 'No pudimos verificar tu email: $e';
+    }
+  }
+
+  Future<String?> forgotPassword(String email) async {
+    final trimmed = email.trim();
+    if (trimmed.isEmpty) {
+      return 'Necesitamos tu email para enviar el link de restablecimiento.';
+    }
+
+    final uri = Uri.parse(
+      '${AppConfig.backendBaseUrl}/v1/auth/forgot-password',
+    );
+
+    try {
+      final res = await _http.post(
+        uri,
+        headers: {'content-type': 'application/json'},
+        body: jsonEncode({'email': trimmed}),
+      );
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        return null;
+      }
+
+      return _errorFromResponse(
+        res,
+        'No pudimos enviar el email de restablecimiento',
+      );
+    } catch (e) {
+      return 'No pudimos enviar el email de restablecimiento: $e';
+    }
+  }
+
+  Future<String?> resetPassword({
+    required String token,
+    required String password,
+  }) async {
+    final trimmedToken = token.trim();
+    if (trimmedToken.isEmpty) {
+      return 'El token del email es obligatorio.';
+    }
+
+    final uri = Uri.parse('${AppConfig.backendBaseUrl}/v1/auth/reset-password');
+
+    try {
+      final res = await _http.post(
+        uri,
+        headers: {'content-type': 'application/json'},
+        body: jsonEncode({'token': trimmedToken, 'password': password}),
+      );
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        return null;
+      }
+
+      return _errorFromResponse(res, 'No pudimos actualizar tu contraseña');
+    } catch (e) {
+      return 'No pudimos actualizar tu contraseña: $e';
+    }
+  }
+
   void logout() {
     _lastError = null;
     _isGuest = false;
     _displayName = null;
     setAccessToken(null);
+  }
+
+  String _errorFromResponse(http.Response res, String fallback) {
+    if (res.body.isNotEmpty) {
+      try {
+        final raw = jsonDecode(res.body);
+        if (raw is Map) {
+          final msg = raw['error'];
+          if (msg is String && msg.trim().isNotEmpty) {
+            return msg.trim();
+          }
+        }
+      } catch (_) {
+        final snippet = res.body.length > 120
+            ? '${res.body.substring(0, 117)}...'
+            : res.body;
+        if (snippet.trim().isNotEmpty) {
+          return snippet.trim();
+        }
+      }
+    }
+
+    return '$fallback (status ${res.statusCode})';
   }
 }

@@ -322,6 +322,29 @@ class _LoginScreenState extends State<LoginScreen> {
               ],
             ),
             const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              children: [
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () {
+                          context.go('/auth/forgot-password');
+                        },
+                  child: const Text('¿Olvidaste tu contraseña?'),
+                ),
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () {
+                          context.go('/auth/verify-email');
+                        },
+                  child: const Text('Tengo un link de verificación'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             const Text(
               'Dev note: backend URL comes from --dart-define=TRUCOSHI_BACKEND_URL',
               style: TextStyle(fontSize: 12),

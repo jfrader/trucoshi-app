@@ -89,4 +89,51 @@ void main() {
     expect(s.accessToken, isNull);
     expect(s.lastError, contains('Failed to parse auth response'));
   });
+
+  test('forgotPassword hits endpoint and returns null on success', () async {
+    late http.Request captured;
+    final client = MockClient((req) async {
+      captured = req;
+      return http.Response('', 204);
+    });
+
+    final s = AuthService(httpClient: client);
+    final err = await s.forgotPassword('player@example.com');
+
+    expect(err, isNull);
+    expect(captured.url.path, contains('/v1/auth/forgot-password'));
+    expect(captured.body, contains('player@example.com'));
+  });
+
+  test('resetPassword forwards backend error message', () async {
+    final client = MockClient((req) async {
+      return http.Response(jsonEncode({'error': 'invalid token'}), 400);
+    });
+
+    final s = AuthService(httpClient: client);
+    final err = await s.resetPassword(token: 'abc', password: 'password1');
+
+    expect(err, 'invalid token');
+  });
+
+  test('verifyEmail returns null on success', () async {
+    late http.Request captured;
+    final client = MockClient((req) async {
+      captured = req;
+      return http.Response('', 204);
+    });
+
+    final s = AuthService(httpClient: client);
+    final err = await s.verifyEmail('token-123');
+
+    expect(err, isNull);
+    expect(captured.url.path, contains('/v1/auth/verify-email'));
+    expect(captured.body, contains('token-123'));
+  });
+
+  test('sendVerificationEmail requires login', () async {
+    final s = AuthService();
+    final err = await s.sendVerificationEmail();
+    expect(err, contains('iniciar sesión'));
+  });
 }

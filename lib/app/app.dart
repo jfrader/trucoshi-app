@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../platform/platform_caps.dart';
+import '../screens/forgot_password_screen.dart';
+import '../screens/leaderboard_screen.dart';
 import '../screens/lobby_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/match_history_screen.dart';
 import '../screens/match_screen.dart';
 import '../screens/player_profile_screen.dart';
+import '../screens/reset_password_screen.dart';
 import '../screens/table_screen.dart';
-import '../screens/leaderboard_screen.dart';
+import '../screens/verify_email_screen.dart';
 import '../services/auth_service.dart';
 import '../services/ws/ws_service.dart';
 
@@ -56,6 +59,24 @@ class _TrucoshiAppState extends State<TrucoshiApp> {
         GoRoute(
           path: '/login',
           builder: (context, state) => LoginScreen(auth: _auth, caps: _caps),
+        ),
+        GoRoute(
+          path: '/auth/forgot-password',
+          builder: (context, state) => ForgotPasswordScreen(auth: _auth),
+        ),
+        GoRoute(
+          path: '/auth/reset-password',
+          builder: (context, state) {
+            final token = state.uri.queryParameters['token'] ?? '';
+            return ResetPasswordScreen(auth: _auth, token: token);
+          },
+        ),
+        GoRoute(
+          path: '/auth/verify-email',
+          builder: (context, state) {
+            final token = state.uri.queryParameters['token'] ?? '';
+            return VerifyEmailScreen(auth: _auth, token: token);
+          },
         ),
         GoRoute(
           path: '/lobby',
